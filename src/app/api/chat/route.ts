@@ -2,8 +2,88 @@ import { streamText, UIMessage, tool } from "ai"
 import { google } from "@ai-sdk/google"
 import { z } from "zod"
 
+// Type definitions for KMC Context
+interface StepByStepProcess {
+    title: string;
+    steps: string[];
+    documents: string[];
+}
+
+interface NewConnectionProcess {
+    title: string;
+    steps: string[];
+}
+
+interface WaterSupplyDepartment {
+    name: string;
+    head: string;
+    services: string[];
+    penalty: string;
+    portalLink: string;
+    departmentLink: string;
+    stepByStepProcess: StepByStepProcess & {
+        newConnection: NewConnectionProcess;
+    };
+}
+
+interface PropertyTaxDepartment {
+    name: string;
+    services: string[];
+    portalLink: string;
+    contact: string;
+    stepByStepProcess: StepByStepProcess;
+}
+
+interface BirthDeathDepartment {
+    name: string;
+    services: string[];
+    portalLink: string;
+    stepByStepProcess: StepByStepProcess;
+}
+
+interface LicenseDepartment {
+    name: string;
+    services: string[];
+    portalLink: string;
+    stepByStepProcess: StepByStepProcess;
+}
+
+interface CommonService {
+    service: string;
+    link: string;
+    process: string;
+}
+
+interface CitizenRegistration {
+    title: string;
+    steps: string[];
+}
+
+interface GeneralProcess {
+    citizenRegistration: CitizenRegistration;
+    commonServices: CommonService[];
+}
+
+interface PaymentInfo {
+    note: string;
+    securePayment: string;
+}
+
+interface Departments {
+    propertyTax: PropertyTaxDepartment;
+    waterSupply: WaterSupplyDepartment;
+    birthDeath: BirthDeathDepartment;
+    license: LicenseDepartment;
+}
+
+interface KMCContext {
+    departments: Departments;
+    generalProcess: GeneralProcess;
+    paymentInfo: PaymentInfo;
+}
+
 // KMC Context Database with Step-by-Step Processes
-const KMC_CONTEXT = {
+const KMC_CONTEXT: KMCContext = {
     departments: {
         propertyTax: {
             name: "Property Tax Department",
@@ -177,42 +257,73 @@ const KMC_CONTEXT = {
     }
 };
 
+// Define valid category types
+type ValidCategory = keyof KMCContext;
+
+// // Define subcategory types for each category
+// type DepartmentSubcategory = keyof Departments;
+// type GeneralProcessSubcategory = keyof GeneralProcess;
+
+// Tool result interface
+interface ToolResult {
+    error?: string;
+    category?: ValidCategory;
+    subcategory?: string;
+    data?: unknown;
+}
+
 // Context access tool
 const kmcContextTool = tool({
     description: "Access specific KMC (Kolhapur Municipal Corporation) information, step-by-step processes, form filling instructions, and official portal navigation",
     parameters: z.object({
-        category: z.enum([
-            "departments",
-            "generalProcess",
-            "paymentInfo",
-            "contact",
-            "utilityInfo"
-        ]).describe("Category of KMC information to retrieve"),
-        subcategory: z.string().optional().describe("Specific subcategory within the main category (e.g., 'propertyTax', 'waterSupply', 'citizenRegistration')")
+        category: z.enum(["departments", "generalProcess", "paymentInfo"])
+            .describe("Category of KMC information to retrieve"),
+        subcategory: z.string().optional()
+            .describe("Specific subcategory within the main category (e.g., 'propertyTax', 'waterSupply', 'citizenRegistration')")
     }),
-    execute: async ({ category, subcategory }) => {
-        const categoryData = KMC_CONTEXT[category as keyof typeof KMC_CONTEXT];
+    execute: async ({ category, subcategory }): Promise<ToolResult> => {
+        const categoryData = KMC_CONTEXT[category as ValidCategory];
 
         if (!categoryData) {
             return { error: "Category not found" };
         }
 
-        if (subcategory && typeof categoryData === 'object' && (categoryData as Record<string, any>)[subcategory]) {
-            return {
-                category,
-                subcategory,
-                data: (categoryData as Record<string, any>)[subcategory]
-            };
+        if (subcategory && typeof categoryData === 'object' && categoryData !== null) {
+            const typedCategoryData = categoryData;
+
+            if (category === "departments" && subcategory in (typedCategoryData as Departments)) {
+                return {
+                    category: category as ValidCategory,
+                    subcategory,
+                    data: (typedCategoryData as Departments)[subcategory as keyof Departments]
+                };
+            }
+            if (category === "generalProcess" && subcategory in (typedCategoryData as GeneralProcess)) {
+                return {
+                    category: category as ValidCategory,
+                    subcategory,
+                    data: (typedCategoryData as GeneralProcess)[subcategory as keyof GeneralProcess]
+                };
+            }
+            if (category === "paymentInfo" && subcategory in (typedCategoryData as PaymentInfo)) {
+                return {
+                    category: category as ValidCategory,
+                    subcategory,
+                    data: (typedCategoryData as PaymentInfo)[subcategory as keyof PaymentInfo]
+                };
+            }
         }
 
         return {
-            category,
+            category: category as ValidCategory,
             data: categoryData
         };
     }
 });
 
-async function buildMCPPrompt(city: string = "Delhi"): Promise<string> {
+type LanguagePreference = 'english' | 'marathi' | 'hindi' | null;
+
+async function buildMCPPrompt(city: string = "Kolhapur"): Promise<string> {
     const now = new Date();
     const date = now.toLocaleDateString("en-IN");
     const time = now.toLocaleTimeString("en-IN", {
@@ -255,9 +366,9 @@ System Context:
 - Emphasize that all transactions are secure and government-approved
 
 **Key Departments & Services:**
-1. **Property Tax** - Handle assessments, payments (online via mobikwik), and queries
+1. **Property Tax** - Handle assessments, payments and queries
 2. **Water Supply** - Bill payments (1% monthly penalty for delays), maintenance requests
-3. **Health Sanitation** - Waste management, hospital services (Panchganga, Isolation)
+3. **Health Sanitation** - Waste management, hospital services
 4. **License** - Business permits and documentation
 5. **Fire Department** - Emergency services and safety compliance
 6. **Birth/Death Registry** - Certificate issuance and records
@@ -290,7 +401,6 @@ System Context:
 - Always format links as: [Display Text](URL)
 - Provide direct service access: [Apply Here](portal-link)
 - Include contact links: [Call KMC](tel:0231-2540291)
-- Social media: [Follow on Facebook](facebook-url)
 
 **For Non-KMC Topics:**
 Respond with: "I can only assist with Kolhapur Municipal Corporation related queries. Please ask about KMC services, departments, or municipal matters."
@@ -301,7 +411,7 @@ Respond with: "I can only assist with Kolhapur Municipal Corporation related que
 `;
 }
 
-function detectLanguagePreference(messages: UIMessage[]): string | null {
+function detectLanguagePreference(messages: UIMessage[]): LanguagePreference {
     // Check if language preference has been established in conversation
     const conversationText = messages.map(m => m.content).join(' ').toLowerCase();
 
@@ -347,7 +457,7 @@ ${languagePreference ?
         model: google("gemini-2.0-flash"),
         system: enhancedSystemPrompt,
         temperature: 0.3,
-        maxSteps: 10, // Increased to allow tool usage
+        maxSteps: 10,
         tools: {
             kmcContextTool
         },

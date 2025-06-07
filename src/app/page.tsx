@@ -8,7 +8,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { SendHorizontal, X, AlertCircle, ExternalLink } from "lucide-react";
+import { SendHorizontal, X, AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export default function Page() {
@@ -69,7 +69,9 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({ target: { value: "English" } } as any);
+            handleInputChange({
+              target: { value: "English" },
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs font-medium hover:bg-blue-100 border-blue-300 transition-colors"
@@ -80,7 +82,9 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({ target: { value: "मराठी" } } as any);
+            handleInputChange({
+              target: { value: "मराठी" },
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs font-medium hover:bg-orange-100 border-orange-300 transition-colors"
@@ -91,7 +95,9 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({ target: { value: "हिंदी" } } as any);
+            handleInputChange({
+              target: { value: "हिंदी" },
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs font-medium hover:bg-green-100 border-green-300 transition-colors"
@@ -113,7 +119,7 @@ export default function Page() {
           onClick={() => {
             handleInputChange({
               target: { value: "Property tax payment information" },
-            } as any);
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-green-50 hover:bg-green-100 border border-green-200 transition-colors"
@@ -131,7 +137,7 @@ export default function Page() {
           onClick={() => {
             handleInputChange({
               target: { value: "Water bill payment" },
-            } as any);
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
@@ -147,7 +153,7 @@ export default function Page() {
           onClick={() => {
             handleInputChange({
               target: { value: "Birth certificate application" },
-            } as any);
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 transition-colors"
@@ -163,7 +169,7 @@ export default function Page() {
           onClick={() => {
             handleInputChange({
               target: { value: "Business license information" },
-            } as any);
+            } as React.ChangeEvent<HTMLInputElement>);
             setTimeout(() => handleSubmit(), 100);
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors"
