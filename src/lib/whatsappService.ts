@@ -2,7 +2,7 @@
 import twilio from 'twilio';
 import { google } from '@ai-sdk/google';
 import { streamText } from 'ai';
-// import { z } from 'zod';
+import { Redis } from '@upstash/redis';
 import { kmcContextTool } from './kmcContextTool';
 
 interface ChatMessage {
@@ -21,9 +21,7 @@ interface MenuOption {
 
 export class WhatsAppService {
     private twilioClient: twilio.Twilio;
-    private conversationStore: Map<string, ChatMessage[]> = new Map();
-    private languageStore: Map<string, string> = new Map();
-    private userStateStore: Map<string, string> = new Map(); // Track user state
+    private redis: Redis;
 
     // Predefined menu options
     private menuOptions: MenuOption[] = [
@@ -87,17 +85,41 @@ export class WhatsAppService {
 
     constructor(accountSid: string, authToken: string) {
         this.twilioClient = twilio(accountSid, authToken);
+
+        // Initialize Upstash Redis
+        this.redis = new Redis({
+            url: process.env.UPSTASH_REDIS_REST_URL!,
+            token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+        });
     }
 
     async handleIncomingMessage(from: string, body: string): Promise<string> {
         try {
             const phoneNumber = from.replace('whatsapp:', '');
-            const history = this.conversationStore.get(phoneNumber) || [];
-            const userState = this.userStateStore.get(phoneNumber) || 'initial';
 
-            // Check if it's the first message
-            if (history.length === 0) {
-                this.userStateStore.set(phoneNumber, 'language_selection');
+            // Get data from Redis with proper typing
+            const historyData = await this.redis.get(`chat:${phoneNumber}`);
+            const userState = await this.redis.get(`state:${phoneNumber}`) || 'initial';
+            const userLanguage = await this.redis.get(`lang:${phoneNumber}`) || '';
+
+            // Parse history data safely
+            let history: ChatMessage[] = [];
+            if (historyData && Array.isArray(historyData)) {
+                history = historyData as ChatMessage[];
+            } else if (typeof historyData === 'string') {
+                try {
+                    history = JSON.parse(historyData);
+                } catch {
+                    history = [];
+                }
+            }
+
+            console.log(`🔍 DEBUG: Phone: ${phoneNumber}, State: ${userState}, Message: "${body}", History length: ${history.length}`);
+
+            // Check if it's the first message or initial state
+            if (history.length === 0 && userState === 'initial') {
+                await this.redis.setex(`state:${phoneNumber}`, 3600, 'language_selection'); // 1 hour TTL
+                console.log(`✅ Set state to language_selection for ${phoneNumber}`);
                 return this.getLanguageSelectionMessage();
             }
 
@@ -105,9 +127,12 @@ export class WhatsAppService {
             if (userState === 'language_selection') {
                 const language = this.handleLanguageSelection(body, phoneNumber);
                 if (language) {
-                    this.userStateStore.set(phoneNumber, 'menu_shown');
+                    console.log(`✅ Language selected: ${language} for ${phoneNumber}`);
+                    await this.redis.setex(`lang:${phoneNumber}`, 3600, language);
+                    await this.redis.setex(`state:${phoneNumber}`, 3600, 'menu_shown');
                     return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
                 } else {
+                    console.log(`❌ Invalid language choice: "${body}" for ${phoneNumber}`);
                     return this.getLanguageSelectionMessage();
                 }
             }
@@ -115,34 +140,66 @@ export class WhatsAppService {
             // Check if user selected a numbered option
             const selectedOption = this.parseMenuSelection(body);
             if (selectedOption) {
-                const userLanguage = this.languageStore.get(phoneNumber) || 'english';
-                return await this.handleMenuSelection(selectedOption, phoneNumber, userLanguage);
+                const language = (userLanguage as string) || 'english';
+                const response = await this.handleMenuSelection(selectedOption, phoneNumber, language);
+
+                // Update history in Redis
+                await this.updateConversationHistory(phoneNumber, body, response);
+
+                return response;
             }
 
             // Handle free text or show menu again if user seems lost
             if (this.shouldShowMenu(body)) {
-                const userLanguage = this.languageStore.get(phoneNumber) || 'english';
-                return this.getMainMenuMessage(userLanguage as 'english' | 'marathi' | 'hindi');
+                const language = (userLanguage as string) || 'english';
+                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
             }
 
             // Process with AI for free text
-            const userLanguage = this.languageStore.get(phoneNumber) || 'english';
-            const response = await this.processWithKMCAI(body, history, userLanguage);
+            const language = (userLanguage as string) || 'english';
+            const response = await this.processWithKMCAI(body, history, language);
 
-            // Update conversation history
-            history.push(
-                { role: 'user', content: body, timestamp: new Date() },
-                { role: 'assistant', content: response, timestamp: new Date() }
-            );
-
-            this.conversationStore.set(phoneNumber, history.slice(-20));
+            // Update conversation history in Redis
+            await this.updateConversationHistory(phoneNumber, body, response);
 
             // Add menu reminder at the end
-            return response + "\n\n" + this.getMenuReminder(userLanguage);
+            return response + "\n\n" + this.getMenuReminder(language);
 
         } catch (error) {
-            console.error('WhatsApp message processing error:', error);
+            console.error('❌ WhatsApp message processing error:', error);
             return "Sorry, I'm having trouble right now. Type 'menu' to see options or contact KMC at 0231-2540291.";
+        }
+    }
+
+    private async updateConversationHistory(phoneNumber: string, userMessage: string, botResponse: string): Promise<void> {
+        try {
+            // Get existing history
+            const historyData = await this.redis.get(`chat:${phoneNumber}`) || [];
+            let history: ChatMessage[] = [];
+
+            if (Array.isArray(historyData)) {
+                history = historyData as ChatMessage[];
+            } else if (typeof historyData === 'string') {
+                try {
+                    history = JSON.parse(historyData);
+                } catch {
+                    history = [];
+                }
+            }
+
+            // Add new messages
+            history.push(
+                { role: 'user', content: userMessage, timestamp: new Date() },
+                { role: 'assistant', content: botResponse, timestamp: new Date() }
+            );
+
+            // Keep only last 20 messages and save to Redis with 1 hour TTL
+            const recentHistory = history.slice(-20);
+            await this.redis.setex(`chat:${phoneNumber}`, 3600, JSON.stringify(recentHistory));
+
+            console.log(`💾 Updated conversation history for ${phoneNumber}, total messages: ${recentHistory.length}`);
+        } catch (error) {
+            console.error('❌ Failed to update conversation history:', error);
         }
     }
 
@@ -160,19 +217,22 @@ Reply with the number of your choice.`;
     }
 
     private handleLanguageSelection(message: string, phoneNumber: string): string | null {
-        const choice = message.trim();
+        const choice = message.trim().toLowerCase();
 
-        if (choice === '1' || message.toLowerCase().includes('english')) {
-            this.languageStore.set(phoneNumber, 'english');
+        console.log(`🔍 Language selection input: "${choice}" for ${phoneNumber}`);
+
+        if (choice === '1' || choice.includes('english')) {
+            console.log(`✅ Language set to English for ${phoneNumber}`);
             return 'english';
-        } else if (choice === '2' || message.toLowerCase().includes('मराठी') || message.toLowerCase().includes('marathi')) {
-            this.languageStore.set(phoneNumber, 'marathi');
+        } else if (choice === '2' || choice.includes('मराठी') || choice.includes('marathi')) {
+            console.log(`✅ Language set to Marathi for ${phoneNumber}`);
             return 'marathi';
-        } else if (choice === '3' || message.toLowerCase().includes('हिंदी') || message.toLowerCase().includes('hindi')) {
-            this.languageStore.set(phoneNumber, 'hindi');
+        } else if (choice === '3' || choice.includes('हिंदी') || choice.includes('hindi')) {
+            console.log(`✅ Language set to Hindi for ${phoneNumber}`);
             return 'hindi';
         }
 
+        console.log(`❌ No language match for: "${choice}"`);
         return null;
     }
 
@@ -180,7 +240,7 @@ Reply with the number of your choice.`;
         const header = {
             english: "🏛️ *KMC Services Menu*\nWhat can I help you with today?",
             marathi: "🏛️ *KMC सेवा मेनू*\nआज मी तुमची काय मदत करू शकतो?",
-            hindi: "🏛️ *KMC सेवा मेनू*\nआज मैं आपकी क्या मदद कर सकता हूं?"
+            hindi: "🏛️ *KMC सेवा मेनू*\nआज मैं आपकी क्या मदत कर सकता हूं?"
         };
 
         const footer = {
@@ -219,8 +279,8 @@ Reply with the number of your choice.`;
     }
 
     private async handleMenuSelection(option: MenuOption, phoneNumber: string, language: string): Promise<string> {
-        // Set user context for this service
-        this.userStateStore.set(phoneNumber, `service_${option.category}`);
+        // Set user context for this service in Redis
+        await this.redis.setex(`context:${phoneNumber}`, 3600, `service_${option.category}`);
 
         switch (option.category) {
             case 'propertyTax':
@@ -248,7 +308,7 @@ Reply with the number of your choice.`;
                     marathi: "कृपया KMC सेवांबद्दल आपला प्रश्न टाइप करा, मी तुमची मदत करेन:",
                     hindi: "कृपया KMC सेवाओं के बारे में अपना प्रश्न टाइप करें, मैं आपकी सहायता करूंगा:"
                 };
-                this.userStateStore.set(phoneNumber, 'free_text_mode');
+                await this.redis.setex(`state:${phoneNumber}`, 3600, 'free_text_mode');
                 return prompt[language as 'english' | 'marathi' | 'hindi'];
 
             default:
@@ -257,7 +317,6 @@ Reply with the number of your choice.`;
     }
 
     private async getPropertyTaxInfo(language: string): Promise<string> {
-        // Use your existing KMC context tool to get property tax info
         const response = {
             english: `📊 *Property Tax Payment Process*
 
@@ -314,7 +373,7 @@ Would you like help with registration or have other questions?`,
 
 *संपर्क:* 0231-2540291
 
-क्या पंजीकरण में मदद चाहिए या अन्य प्रश्न हैं?`
+क्या पंजीकरण में मदत चाहिए या अन्य प्रश्न हैं?`
         };
 
         return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
@@ -644,12 +703,11 @@ Monday to Saturday: 10:00 AM - 5:00 PM
         return `---\n${reminder[language as 'english' | 'marathi' | 'hindi']}`;
     }
 
-    // Process with your existing KMC AI logic (copy from your route.ts)
+    // Process with your existing KMC AI logic
     private async processWithKMCAI(userMessage: string, history: ChatMessage[], language: string): Promise<string> {
         try {
             // Use your existing buildMCPPrompt and kmcContextTool logic
             const systemPrompt = await this.buildKMCPrompt(language);
-            const kmcContextTool = this.createKMCContextTool();
 
             const result = await streamText({
                 model: google("gemini-2.0-flash"),
@@ -741,11 +799,6 @@ Always use kmcContextTool to provide accurate information and step-by-step guida
 `;
     }
 
-    private createKMCContextTool() {
-        // Copy your existing kmcContextTool implementation from route.ts
-        return kmcContextTool
-    }
-
     async sendMessage(to: string, message: string): Promise<void> {
         await this.twilioClient.messages.create({
             from: process.env.TWILIO_WHATSAPP_NUMBER!,
@@ -760,17 +813,20 @@ Always use kmcContextTool to provide accurate information and step-by-step guida
 
         switch (cmd) {
             case '/help':
-                const userLanguage = this.languageStore.get(phoneNumber) || 'english';
+                const userLanguage = await this.redis.get(`lang:${phoneNumber}`) || 'english';
                 return this.getMainMenuMessage(userLanguage as 'english' | 'marathi' | 'hindi');
 
             case '/clear':
-                this.conversationStore.delete(phoneNumber);
-                this.languageStore.delete(phoneNumber);
-                this.userStateStore.delete(phoneNumber);
+                // Clear all Redis data for this user
+                await this.redis.del(`chat:${phoneNumber}`);
+                await this.redis.del(`lang:${phoneNumber}`);
+                await this.redis.del(`state:${phoneNumber}`);
+                await this.redis.del(`context:${phoneNumber}`);
+                console.log(`🗑️ Cleared all data for ${phoneNumber}`);
                 return "✅ Conversation history cleared! You can start fresh.";
 
             case '/menu':
-                const language = this.languageStore.get(phoneNumber) || 'english';
+                const language = await this.redis.get(`lang:${phoneNumber}`) || 'english';
                 return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
 
             default:

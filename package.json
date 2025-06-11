@@ -21,6 +21,7 @@
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",
     "@types/mdx": "^2.0.13",
+    "@upstash/redis": "^1.35.0",
     "ai": "^4.3.16",
     "body-parser": "^2.2.0",
     "class-variance-authority": "^0.7.1",
