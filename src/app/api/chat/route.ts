@@ -1,6 +1,6 @@
-import { streamText, UIMessage, tool } from "ai"
+import { streamText, UIMessage } from "ai"
 import { google } from "@ai-sdk/google"
-import { z } from "zod"
+// import { z } from "zod"
 import { kmcContextTool } from "@/lib/kmcContextTool";
 
 

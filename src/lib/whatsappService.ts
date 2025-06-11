@@ -1,8 +1,8 @@
 // src/lib/whatsappService.ts
 import twilio from 'twilio';
 import { google } from '@ai-sdk/google';
-import { streamText, tool } from 'ai';
-import { z } from 'zod';
+import { streamText } from 'ai';
+// import { z } from 'zod';
 import { kmcContextTool } from './kmcContextTool';
 
 interface ChatMessage {
