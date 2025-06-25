@@ -1,7 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
 
-
 // Type definitions for KMC Context
 interface StepByStepProcess {
     title: string;
@@ -48,6 +47,47 @@ interface LicenseDepartment {
     stepByStepProcess: StepByStepProcess;
 }
 
+interface ShelterInfo {
+    name: string;
+    totalCapacity: number;
+    currentOccupancy: number;
+    availableVacancy: number;
+    status: 'ACTIVE' | 'NEARLY_FULL' | 'FULL' | 'CLOSED';
+    contact: string;
+    address: string;
+}
+
+interface WaterLevelInfo {
+    date: string;
+    time: string;
+    rajaram_dam: string;
+    discharge: string;
+    river_levels: string;
+    location: string;
+    alert_status: string;
+}
+
+interface EmergencyContact {
+    department: string;
+    phone: string;
+    secondary?: string;
+    availability: string;
+}
+
+interface DisasterManagementDepartment {
+    name: string;
+    services: string[];
+    officer: {
+        name: string;
+        mobile: string;
+        email: string;
+    };
+    waterLevelInfo: WaterLevelInfo;
+    shelters: ShelterInfo[];
+    emergencyContacts: EmergencyContact[];
+    safetyGuidelines: string[];
+}
+
 interface CommonService {
     service: string;
     link: string;
@@ -70,6 +110,7 @@ interface PaymentInfo {
 }
 
 interface Departments {
+    disasterManagement: DisasterManagementDepartment;
     propertyTax: PropertyTaxDepartment;
     waterSupply: WaterSupplyDepartment;
     birthDeath: BirthDeathDepartment;
@@ -82,9 +123,102 @@ interface KMCContext {
     paymentInfo: PaymentInfo;
 }
 
-// KMC Context Database with Step-by-Step Processes
+// KMC Context Database with Step-by-Step Processes including Disaster Management
 export const KMC_CONTEXT: KMCContext = {
     departments: {
+        disasterManagement: {
+            name: "Disaster Management Department",
+            services: ["Water level monitoring", "Emergency shelter management", "Emergency response coordination", "Public safety alerts"],
+            officer: {
+                name: "Mr. Rajesh Patil",
+                mobile: "9876543200",
+                email: "disaster@kmckolhapur.gov.in"
+            },
+            waterLevelInfo: {
+                date: "25/06/2025",
+                time: "5:00 PM",
+                rajaram_dam: "346\" (540.70m)",
+                discharge: "35417 cusecs",
+                river_levels: "39'00\" to 43'00\"",
+                location: "Panhala-63",
+                alert_status: "Monitor water levels closely"
+            },
+            shelters: [
+                {
+                    name: "Saraswati Vidyalaya",
+                    totalCapacity: 150,
+                    currentOccupancy: 45,
+                    availableVacancy: 105,
+                    status: "ACTIVE",
+                    contact: "9876543210",
+                    address: "Station Road, Kolhapur"
+                },
+                {
+                    name: "Jan Vidyalaya",
+                    totalCapacity: 200,
+                    currentOccupancy: 180,
+                    availableVacancy: 20,
+                    status: "NEARLY_FULL",
+                    contact: "9876543211",
+                    address: "Near Bus Stand, Kolhapur"
+                },
+                {
+                    name: "Municipal School",
+                    totalCapacity: 120,
+                    currentOccupancy: 120,
+                    availableVacancy: 0,
+                    status: "FULL",
+                    contact: "9876543212",
+                    address: "City Center, Kolhapur"
+                }
+            ],
+            emergencyContacts: [
+                {
+                    department: "KMC Emergency Control Room",
+                    phone: "0231-2540291",
+                    availability: "24/7"
+                },
+                {
+                    department: "Fire Department",
+                    phone: "101",
+                    secondary: "0231-2544444",
+                    availability: "24/7"
+                },
+                {
+                    department: "Medical Emergency",
+                    phone: "108",
+                    secondary: "0231-2566666",
+                    availability: "24/7"
+                },
+                {
+                    department: "Police Control Room",
+                    phone: "100",
+                    secondary: "0231-2577777",
+                    availability: "24/7"
+                },
+                {
+                    department: "Flood Control Room",
+                    phone: "0231-2540291 (Ext: 123)",
+                    availability: "24/7"
+                },
+                {
+                    department: "Electricity Emergency",
+                    phone: "1912",
+                    secondary: "0231-2588888",
+                    availability: "24/7"
+                }
+            ],
+            safetyGuidelines: [
+                "Avoid areas near riverbanks during high water levels",
+                "Follow evacuation notices if issued by authorities",
+                "Keep emergency kit ready with essentials",
+                "Stay updated through official KMC channels",
+                "Save emergency contact numbers in your phone",
+                "Bring valid ID proof when going to shelters",
+                "Carry basic medicines and drinking water",
+                "Follow instructions from shelter coordinators"
+            ]
+        },
         propertyTax: {
             name: "Property Tax Department",
             services: ["Tax assessment", "Online payments", "Arrears checking"],
@@ -260,10 +394,6 @@ export const KMC_CONTEXT: KMCContext = {
 // Define valid category types
 type ValidCategory = keyof KMCContext;
 
-// // Define subcategory types for each category
-// type DepartmentSubcategory = keyof Departments;
-// type GeneralProcessSubcategory = keyof GeneralProcess;
-
 // Tool result interface
 interface ToolResult {
     error?: string;
@@ -273,14 +403,13 @@ interface ToolResult {
 }
 
 // Context access tool
-
 export const kmcContextTool = tool({
-    description: "Access specific KMC (Kolhapur Municipal Corporation) information, step-by-step processes, form filling instructions, and official portal navigation",
+    description: "Access specific KMC (Kolhapur Municipal Corporation) information, step-by-step processes, form filling instructions, official portal navigation, and disaster management information",
     parameters: z.object({
         category: z.enum(["departments", "generalProcess", "paymentInfo"])
             .describe("Category of KMC information to retrieve"),
         subcategory: z.string().optional()
-            .describe("Specific subcategory within the main category (e.g., 'propertyTax', 'waterSupply', 'citizenRegistration')")
+            .describe("Specific subcategory within the main category (e.g., 'disasterManagement', 'propertyTax', 'waterSupply', 'citizenRegistration')")
     }),
     execute: async ({ category, subcategory }): Promise<ToolResult> => {
         const categoryData = KMC_CONTEXT[category as ValidCategory];

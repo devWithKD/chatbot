@@ -23,59 +23,66 @@ export class WhatsAppService {
     private twilioClient: twilio.Twilio;
     private redis: Redis;
 
-    // Predefined menu options
+    // Updated menu options with Disaster Management as #1
     private menuOptions: MenuOption[] = [
         {
             number: "1",
+            english: "🚨 Disaster Management",
+            marathi: "🚨 आपत्ती व्यवस्थापन",
+            hindi: "🚨 आपदा प्रबंधन",
+            category: "disasterManagement"
+        },
+        {
+            number: "2",
             english: "Property Tax Payment",
             marathi: "मिळकत कर भरणा",
             hindi: "संपत्ति कर भुगतान",
             category: "propertyTax"
         },
         {
-            number: "2",
+            number: "3",
             english: "Water Bill Payment",
             marathi: "पाणी बिल भरणा",
             hindi: "पानी का बिल भुगतान",
             category: "waterSupply"
         },
         {
-            number: "3",
+            number: "4",
             english: "Birth Certificate",
             marathi: "जन्म प्रमाणपत्र",
             hindi: "जन्म प्रमाण पत्र",
             category: "birthCertificate"
         },
         {
-            number: "4",
+            number: "5",
             english: "Death Certificate",
             marathi: "मृत्यू प्रमाणपत्र",
             hindi: "मृत्यु प्रमाण पत्र",
             category: "deathCertificate"
         },
         {
-            number: "5",
+            number: "6",
             english: "Business License",
             marathi: "व्यवसाय परवाना",
             hindi: "व्यापार लाइसेंस",
             category: "businessLicense"
         },
         {
-            number: "6",
+            number: "7",
             english: "Register Complaint",
             marathi: "तक्रार नोंदवा",
             hindi: "शिकायत दर्ज करें",
             category: "complaint"
         },
         {
-            number: "7",
+            number: "8",
             english: "Contact Information",
             marathi: "संपर्क माहिती",
             hindi: "संपर्क जानकारी",
             category: "contact"
         },
         {
-            number: "8",
+            number: "9",
             english: "Other / Type your question",
             marathi: "इतर / आपला प्रश्न टाइप करा",
             hindi: "अन्य / अपना प्रश्न टाइप करें",
@@ -134,6 +141,20 @@ export class WhatsAppService {
                 } else {
                     console.log(`❌ Invalid language choice: "${body}" for ${phoneNumber}`);
                     return this.getLanguageSelectionMessage();
+                }
+            }
+
+            // Handle disaster management sub-menu
+            if (userState === 'disaster_submenu') {
+                const language = (userLanguage as string) || 'english';
+                const subOption = this.parseDisasterSubMenu(body);
+                if (subOption) {
+                    const response = await this.handleDisasterSubMenu(subOption, phoneNumber, language);
+                    await this.updateConversationHistory(phoneNumber, body, response);
+                    return response;
+                } else {
+                    // Invalid option, show disaster submenu again
+                    return this.getDisasterSubMenu(language);
                 }
             }
 
@@ -244,9 +265,9 @@ Reply with the number of your choice.`;
         };
 
         const footer = {
-            english: "\n💬 *Choose a number (1-8) or type your question directly*",
-            marathi: "\n💬 *संख्या निवडा (1-8) किंवा आपला प्रश्न थेट टाइप करा*",
-            hindi: "\n💬 *संख्या चुनें (1-8) या अपना प्रश्न सीधे टाइप करें*"
+            english: "\n💬 *Choose a number (1-9) or type your question directly*",
+            marathi: "\n💬 *संख्या निवडा (1-9) किंवा आपला प्रश्न थेट टाइप करा*",
+            hindi: "\n💬 *संख्या चुनें (1-9) या अपना प्रश्न सीधे टाइप करें*"
         };
 
         let menu = header[language] + "\n\n";
@@ -260,6 +281,358 @@ Reply with the number of your choice.`;
         menu += footer[language];
 
         return menu;
+    }
+
+    private getDisasterSubMenu(language: string): string {
+        const header = {
+            english: "🚨 *Disaster Management Services*\nSelect an option:",
+            marathi: "🚨 *आपत्ती व्यवस्थापन सेवा*\nपर्याय निवडा:",
+            hindi: "🚨 *आपदा प्रबंधन सेवाएं*\nविकल्प चुनें:"
+        };
+
+        const options = {
+            english: [
+                "*1* - 🌊 Water Level Information",
+                "*2* - 🏠 Temporary Shelter Information",
+                "*3* - 📞 Emergency Contacts",
+                "*4* - ⬅️ Back to Main Menu"
+            ],
+            marathi: [
+                "*1* - 🌊 पाणी पातळी माहिती",
+                "*2* - 🏠 तात्पुरते निवारा माहिती",
+                "*3* - 📞 आपत्कालीन संपर्क",
+                "*4* - ⬅️ मुख्य मेनूवर परत या"
+            ],
+            hindi: [
+                "*1* - 🌊 पानी स्तर की जानकारी",
+                "*2* - 🏠 अस्थायी आश्रय जानकारी",
+                "*3* - 📞 आपातकालीन संपर्क",
+                "*4* - ⬅️ मुख्य मेनू पर वापस"
+            ]
+        };
+
+        const langKey = language as 'english' | 'marathi' | 'hindi';
+        return header[langKey] + "\n\n" + options[langKey].join("\n");
+    }
+
+    private parseDisasterSubMenu(message: string): string | null {
+        const trimmed = message.trim();
+
+        if (trimmed === '1' || trimmed.toLowerCase().includes('water') || trimmed.includes('पाणी') || trimmed.includes('पानी')) {
+            return 'waterLevel';
+        } else if (trimmed === '2' || trimmed.toLowerCase().includes('shelter') || trimmed.includes('निवारा') || trimmed.includes('आश्रय')) {
+            return 'shelter';
+        } else if (trimmed === '3' || trimmed.toLowerCase().includes('emergency') || trimmed.includes('आपत्कालीन') || trimmed.includes('आपातकालीन')) {
+            return 'emergency';
+        } else if (trimmed === '4' || trimmed.toLowerCase().includes('back') || trimmed.includes('परत') || trimmed.includes('वापस')) {
+            return 'back';
+        }
+
+        return null;
+    }
+
+    private async handleDisasterSubMenu(option: string, phoneNumber: string, language: string): Promise<string> {
+        switch (option) {
+            case 'waterLevel':
+                return await this.getWaterLevelInfo(language);
+            case 'shelter':
+                return await this.getShelterInfo(language);
+            case 'emergency':
+                return await this.getEmergencyContacts(language);
+            case 'back':
+                await this.redis.setex(`state:${phoneNumber}`, 3600, 'menu_shown');
+                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
+            default:
+                return this.getDisasterSubMenu(language);
+        }
+    }
+
+    private async getWaterLevelInfo(language: string): Promise<string> {
+        const response = {
+            english: `🌊 *Current Water Level Information*
+
+*Date:* 25/06/2025 at 5:00 PM
+*Rajaram Dam:* 346" (540.70m)
+*Discharge:* 35417 cusecs
+*River Levels:* 39'00" to 43'00"
+*Location:* Panhala-63
+
+⚠️ *Alert Status:* Monitor water levels closely
+
+*Safety Guidelines:*
+• Avoid areas near riverbanks
+• Follow evacuation notices if issued
+• Keep emergency kit ready
+• Stay updated through official channels
+
+*Emergency Helpline:* 0231-2540291`,
+
+            marathi: `🌊 *सध्याची पाणी पातळी माहिती*
+
+*दिनांक:* 25/06/2025 संध्याकाळी 5:00 वा.
+*राजाराम धरण:* 346" (540.70m)
+*विसर्ग:* 35417 cusecs
+*नदी पातळी:* 39'00" ते 43'00"
+*स्थान:* पन्हाळा-63
+
+⚠️ *सतर्कता स्थिती:* पाणी पातळीवर बारीक निरीक्षण ठेवा
+
+*सुरक्षा मार्गदर्शन:*
+• नदीकाठी भागांपासून दूर राहा
+• स्थलांतर सूचना मिळाल्यास त्यांचे पालन करा
+• आपत्कालीन किट तयार ठेवा
+• अधिकृत माध्यमांद्वारे अपडेट रहा
+
+*आपत्कालीन हेल्पलाइन:* 0231-2540291`,
+
+            hindi: `🌊 *वर्तमान जल स्तर की जानकारी*
+
+*दिनांक:* 25/06/2025 शाम 5:00 बजे
+*राजाराम बांध:* 346" (540.70m)
+*निकासी:* 35417 cusecs
+*नदी स्तर:* 39'00" से 43'00"
+*स्थान:* पन्हाला-63
+
+⚠️ *अलर्ट स्थिति:* जल स्तर पर निरंतर निगरानी रखें
+
+*सुरक्षा दिशानिर्देश:*
+• नदी तटीय क्षेत्रों से दूर रहें
+• निकासी की सूचना मिलने पर उसका पालन करें
+• आपातकालीन किट तैयार रखें
+• आधिकारिक चैनलों के माध्यम से अपडेट रहें
+
+*आपातकालीन हेल्पलाइन:* 0231-2540291`
+        };
+
+        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
+    }
+
+    private async getShelterInfo(language: string): Promise<string> {
+        const response = {
+            english: `🏠 *Temporary Shelter Information*
+
+*Available Shelters:*
+
+🏫 *Shelter 1: Saraswati Vidyalaya*
+• Total Capacity: 150 people
+• Current Occupancy: 45 people
+• Available Vacancy: 105 people
+• Status: 🟢 ACTIVE/OPEN
+• Contact: 9876543210
+• Address: Station Road, Kolhapur
+
+🏫 *Shelter 2: Jan Vidyalaya*
+• Total Capacity: 200 people
+• Current Occupancy: 180 people
+• Available Vacancy: 20 people
+• Status: 🟡 NEARLY FULL
+• Contact: 9876543211
+• Address: Near Bus Stand, Kolhapur
+
+🏫 *Shelter 3: Municipal School*
+• Total Capacity: 120 people
+• Current Occupancy: 120 people
+• Available Vacancy: 0 people
+• Status: 🔴 FULL
+• Contact: 9876543212
+• Address: City Center, Kolhapur
+
+*Emergency Shelter Helpline:* 0231-2540291
+
+*What to bring:*
+• Valid ID proof
+• Basic medicines
+• Drinking water
+• Light snacks`,
+
+            marathi: `🏠 *तात्पुरते निवारा माहिती*
+
+*उपलब्ध निवारे:*
+
+🏫 *निवारा 1: सरस्वती विद्यालय*
+• एकूण क्षमता: 150 लोक
+• सध्याची भरती: 45 लोक
+• उपलब्ध जागा: 105 लोक
+• स्थिती: 🟢 सक्रिय/उघडे
+• संपर्क: 9876543210
+• पत्ता: स्टेशन रोड, कोल्हापूर
+
+🏫 *निवारा 2: जन विद्यालय*
+• एकूण क्षमता: 200 लोक
+• सध्याची भरती: 180 लोक
+• उपलब्ध जागा: 20 लोक
+• स्थिती: 🟡 जवळजवळ भरलेले
+• संपर्क: 9876543211
+• पत्ता: बस स्टॅंड जवळ, कोल्हापूर
+
+🏫 *निवारा 3: नगरपालिका शाळा*
+• एकूण क्षमता: 120 लोक
+• सध्याची भरती: 120 लोक
+• उपलब्ध जागा: 0 लोक
+• स्थिती: 🔴 भरलेले
+• संपर्क: 9876543212
+• पत्ता: शहर मध्य, कोल्हापूर
+
+*आपत्कालीन निवारा हेल्पलाइन:* 0231-2540291
+
+*काय आणावे:*
+• वैध ओळखपत्र
+• मूलभूत औषधे
+• पिण्याचे पाणी
+• हलके नाश्ता`,
+
+            hindi: `🏠 *अस्थायी आश्रय जानकारी*
+
+*उपलब्ध आश्रय:*
+
+🏫 *आश्रय 1: सरस्वती विद्यालय*
+• कुल क्षमता: 150 लोग
+• वर्तमान भरावट: 45 लोग
+• उपलब्ध स्थान: 105 लोग
+• स्थिति: 🟢 सक्रिय/खुला
+• संपर्क: 9876543210
+• पता: स्टेशन रोड, कोल्हापुर
+
+🏫 *आश्रय 2: जन विद्यालय*
+• कुल क्षमता: 200 लोग
+• वर्तमान भरावट: 180 लोग
+• उपलब्ध स्थान: 20 लोग
+• स्थिति: 🟡 लगभग भरा हुआ
+• संपर्क: 9876543211
+• पता: बस स्टैंड के पास, कोल्हापुर
+
+🏫 *आश्रय 3: नगरपालिका स्कूल*
+• कुल क्षमता: 120 लोग
+• वर्तमान भरावट: 120 लोग
+• उपलब्ध स्थान: 0 लोग
+• स्थिति: 🔴 भरा हुआ
+• संपर्क: 9876543212
+• पता: शहर केंद्र, कोल्हापुर
+
+*आपातकालीन आश्रय हेल्पलाइन:* 0231-2540291
+
+*क्या लाना है:*
+• वैध पहचान पत्र
+• बुनियादी दवाएं
+• पीने का पानी
+• हल्का नाश्ता`
+        };
+
+        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
+    }
+
+    private async getEmergencyContacts(language: string): Promise<string> {
+        const response = {
+            english: `📞 *Emergency Contacts - Disaster Management*
+
+🚨 *KMC Emergency Control Room*
+Phone: 0231-2540291
+Available: 24/7
+
+🚒 *Fire Department*
+Phone: 101
+Emergency: 0231-2544444
+
+🚑 *Medical Emergency*
+Phone: 108
+Ambulance: 0231-2566666
+
+👮 *Police Control Room*
+Phone: 100
+Local: 0231-2577777
+
+🌊 *Flood Control Room*
+Phone: 0231-2540291 (Ext: 123)
+
+⚡ *Electricity Emergency*
+MSEB: 1912
+Local: 0231-2588888
+
+*Disaster Management Officer:*
+Mr. Rajesh Patil
+Mobile: 9876543200
+Email: disaster@kmckolhapur.gov.in
+
+*Important:*
+Save these numbers in your phone for quick access during emergencies.`,
+
+            marathi: `📞 *आपत्कालीन संपर्क - आपत्ती व्यवस्थापन*
+
+🚨 *KMC आपत्कालीन नियंत्रण कक्ष*
+फोन: 0231-2540291
+उपलब्ध: 24/7
+
+🚒 *अग्निशमन विभाग*
+फोन: 101
+आपत्कालीन: 0231-2544444
+
+🚑 *वैद्यकीय आपत्काल*
+फोन: 108
+रुग्णवाहिका: 0231-2566666
+
+👮 *पोलीस नियंत्रण कक्ष*
+फोन: 100
+स्थानिक: 0231-2577777
+
+🌊 *पूर नियंत्रण कक्ष*
+फोन: 0231-2540291 (Ext: 123)
+
+⚡ *वीज आपत्काल*
+MSEB: 1912
+स्थानिक: 0231-2588888
+
+*आपत्ती व्यवस्थापन अधिकारी:*
+श्री राजेश पाटील
+मोबाइल: 9876543200
+ईमेल: disaster@kmckolhapur.gov.in
+
+*महत्वाचे:*
+आपत्कालीन परिस्थितीत त्वरित संपर्कासाठी हे नंबर आपल्या फोनमध्ये सेव्ह करा.`,
+
+            hindi: `📞 *आपातकालीन संपर्क - आपदा प्रबंधन*
+
+🚨 *KMC आपातकालीन नियंत्रण कक्ष*
+फोन: 0231-2540291
+उपलब्ध: 24/7
+
+🚒 *अग्निशमन विभाग*
+फोन: 101
+आपातकाल: 0231-2544444
+
+🚑 *चिकित्सा आपातकाल*
+फोन: 108
+एम्बुलेंस: 0231-2566666
+
+👮 *पुलिस नियंत्रण कक्ष*
+फोन: 100
+स्थानीय: 0231-2577777
+
+🌊 *बाढ़ नियंत्रण कक्ष*
+फोन: 0231-2540291 (Ext: 123)
+
+⚡ *बिजली आपातकाल*
+MSEB: 1912
+स्थानीय: 0231-2588888
+
+*आपदा प्रबंधन अधिकारी:*
+श्री राजेश पाटिल
+मोबाइल: 9876543200
+ईमेल: disaster@kmckolhapur.gov.in
+
+*महत्वपूर्ण:*
+आपातकाल के दौरान त्वरित संपर्क के लिए इन नंबरों को अपने फोन में सेव करें।`
+        };
+
+        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
+    }
+
+    private getDisasterMenuReminder(language: string): string {
+        const reminder = {
+            english: "💬 Type 1-4 for disaster services or 'menu' for main menu",
+            marathi: "💬 आपत्ती सेवांसाठी 1-4 टाइप करा किंवा मुख्य मेनूसाठी 'menu'",
+            hindi: "💬 आपदा सेवाओं के लिए 1-4 टाइप करें या मुख्य मेनू के लिए 'menu'"
+        };
+        return `---\n${reminder[language as 'english' | 'marathi' | 'hindi']}`;
     }
 
     private parseMenuSelection(message: string): MenuOption | null {
@@ -283,6 +656,11 @@ Reply with the number of your choice.`;
         await this.redis.setex(`context:${phoneNumber}`, 3600, `service_${option.category}`);
 
         switch (option.category) {
+            case 'disasterManagement':
+                // Set state to disaster submenu
+                await this.redis.setex(`state:${phoneNumber}`, 3600, 'disaster_submenu');
+                return this.getDisasterSubMenu(language);
+
             case 'propertyTax':
                 return await this.getPropertyTaxInfo(language);
 
@@ -763,7 +1141,7 @@ System Context:
 - Language: ${language}
 
 **STRICT OPERATIONAL RULES:**
-1. **ONLY respond to KMC-related queries** - Property tax, water supply, health services, licenses, fire department, birth/death certificates, PWD, municipal services, KMC operations, etc.
+1. **ONLY respond to KMC-related queries** - Property tax, water supply, health services, licenses, fire department, birth/death certificates, PWD, municipal services, KMC operations, disaster management, etc.
 2. **REFUSE all non-KMC topics** - Do NOT answer questions about general knowledge, other cities, entertainment, technology, personal advice, etc.
 3. **Language Protocol**: ${languageInstruction}
 
@@ -775,13 +1153,14 @@ System Context:
 - Include phone numbers in clickable format
 
 **KEY DEPARTMENTS & SERVICES:**
-1. **Property Tax** 📊 - Handle assessments, payments and queries
-2. **Water Supply** 💧 - Bill payments (1% monthly penalty for delays), maintenance requests  
-3. **Health Sanitation** 🏥 - Waste management, hospital services
-4. **License** 📄 - Business permits and documentation
-5. **Fire Department** 🚒 - Emergency services and safety compliance
-6. **Birth/Death Registry** 📋 - Certificate issuance and records
-7. **PWD** 🏗️ - Infrastructure maintenance and tender information
+1. **Disaster Management** 🚨 - Water level monitoring, shelter information, emergency contacts
+2. **Property Tax** 📊 - Handle assessments, payments and queries
+3. **Water Supply** 💧 - Bill payments (1% monthly penalty for delays), maintenance requests  
+4. **Health Sanitation** 🏥 - Waste management, hospital services
+5. **License** 📄 - Business permits and documentation
+6. **Fire Department** 🚒 - Emergency services and safety compliance
+7. **Birth/Death Registry** 📋 - Certificate issuance and records
+8. **PWD** 🏗️ - Infrastructure maintenance and tender information
 
 **RESPONSE GUIDELINES:**
 1. Use kmcContextTool to get accurate step-by-step processes
