@@ -1,18 +1,16 @@
-import { streamText, UIMessage } from "ai"
-import { google } from "@ai-sdk/google"
+import { convertToModelMessages, streamText, UIMessage } from "ai";
 // import { z } from "zod"
 import { kmcContextTool } from "@/lib/kmcContextTool";
 
-
 async function buildMCPPrompt(city: string = "Kolhapur"): Promise<string> {
-    const now = new Date();
-    const date = now.toLocaleDateString("en-IN");
-    const time = now.toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-    });
+  const now = new Date();
+  const date = now.toLocaleDateString("en-IN");
+  const time = now.toLocaleTimeString("en-IN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-    return `
+  return `
 You are an official assistant for Kolhapur Municipal Corporation (KMC), established in 1954 and upgraded to municipal corporation in 1982. Your knowledge cutoff is June 2025.
 
 System Context:
@@ -92,41 +90,62 @@ Respond with: "I can only assist with Kolhapur Municipal Corporation related que
 `;
 }
 
-type LanguagePreference = 'english' | 'marathi' | 'hindi' | null;
-
+type LanguagePreference = "english" | "marathi" | "hindi" | null;
 
 function detectLanguagePreference(messages: UIMessage[]): LanguagePreference {
-    // Check if language preference has been established in conversation
-    const conversationText = messages.map(m => m.content).join(' ').toLowerCase();
+  // Check if language preference has been established in conversation
+  const conversationText = messages
+    .flatMap((m) =>
+      (m.parts ?? []).map((p) => (p.type === "text" ? p.text : "")),
+    )
+    .join(" ")
+    .toLowerCase();
 
-    if (conversationText.includes('english') || conversationText.includes('इंग्रजी')) {
-        return 'english';
-    }
-    if (conversationText.includes('marathi') || conversationText.includes('मराठी')) {
-        return 'marathi';
-    }
-    if (conversationText.includes('hindi') || conversationText.includes('हिंदी')) {
-        return 'hindi';
-    }
+  if (
+    conversationText.includes("english") ||
+    conversationText.includes("इंग्रजी")
+  ) {
+    return "english";
+  }
+  if (
+    conversationText.includes("marathi") ||
+    conversationText.includes("मराठी")
+  ) {
+    return "marathi";
+  }
+  if (
+    conversationText.includes("hindi") ||
+    conversationText.includes("हिंदी")
+  ) {
+    return "hindi";
+  }
 
-    return null;
+  return null;
 }
 
 export async function POST(req: Request) {
-    const { messages: reqMessages } = await req.json();
-    const messages = reqMessages as UIMessage[];
+  const body = await req.json();
 
-    const systemPrompt = await buildMCPPrompt();
-    const languagePreference = detectLanguagePreference(messages);
+  const messages: UIMessage[] = Array.isArray(body.messages)
+    ? body.messages
+    : [];
 
-    // Add language preference instruction to system prompt
-    const enhancedSystemPrompt = systemPrompt + `
+  const modelMessages = await convertToModelMessages(messages ?? []);
+
+  const systemPrompt = await buildMCPPrompt();
+  const languagePreference = detectLanguagePreference(messages);
+
+  // Add language preference instruction to system prompt
+  const enhancedSystemPrompt =
+    systemPrompt +
+    `
 
 **CURRENT SESSION:**
-${languagePreference ?
-            `Language preference established: ${languagePreference.toUpperCase()}. Respond ONLY in ${languagePreference}.` :
-            'Language preference NOT established. Ask for language preference FIRST before any other response.'
-        }
+${
+  languagePreference
+    ? `Language preference established: ${languagePreference.toUpperCase()}. Respond ONLY in ${languagePreference}.`
+    : "Language preference NOT established. Ask for language preference FIRST before any other response."
+}
 
 **CRITICAL ENFORCEMENT:**
 - If query is NOT about KMC: Refuse politely and redirect to KMC topics
@@ -137,16 +156,15 @@ ${languagePreference ?
 - NO exceptions for non-KMC topics under any circumstances
 `;
 
-    const result = streamText({
-        model: google("gemini-2.0-flash"),
-        system: enhancedSystemPrompt,
-        temperature: 0.3,
-        maxSteps: 10,
-        tools: {
-            kmcContextTool
-        },
-        messages: messages,
-    })
+  const result = streamText({
+    model: "google/gemini-2.5-flash-lite",
+    system: enhancedSystemPrompt,
+    temperature: 0.3,
+    tools: {
+      kmcContextTool,
+    },
+    messages: modelMessages,
+  });
 
-    return result.toDataStreamResponse();
+  return result.toUIMessageStreamResponse();
 }
