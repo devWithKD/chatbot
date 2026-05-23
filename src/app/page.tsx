@@ -10,11 +10,17 @@ import {
 } from "@/components/ui/popover";
 import { SendHorizontal, X, AlertCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DefaultChatTransport } from "ai";
 
 export default function Page() {
-  const { messages, input, handleInputChange, handleSubmit, status } = useChat({
-    initialMessages: [],
+  const { messages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/chat",
+    }),
   });
+
+  const [input, setInput] = useState("");
+
   const messageEndRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState<boolean>(false);
   const [hasLanguagePreference, setHasLanguagePreference] =
@@ -27,7 +33,9 @@ export default function Page() {
   // Check if language preference has been established
   useEffect(() => {
     const conversationText = messages
-      .map((m) => m.content)
+      .map((m) =>
+        m.parts.map((p) => (p.type === "text" ? p.text : "")).join(""),
+      )
       .join(" ")
       .toLowerCase();
     const hasLanguage =
@@ -55,6 +63,18 @@ export default function Page() {
     }
   }, [messages.length, status]);
 
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+
+    if (!input.trim()) return;
+
+    sendMessage({
+      text: input,
+    });
+
+    setInput("");
+  };
+
   // Enhanced language selection with better UX
   const LanguageSelector = () => (
     <div className="flex flex-col gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200 shadow-sm">
@@ -69,10 +89,15 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "English" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "English",
+                },
+              ],
+            });
           }}
           className="text-xs font-medium hover:bg-blue-100 border-blue-300 transition-colors"
         >
@@ -82,10 +107,15 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "मराठी" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "मराठी",
+                },
+              ],
+            });
           }}
           className="text-xs font-medium hover:bg-orange-100 border-orange-300 transition-colors"
         >
@@ -95,10 +125,15 @@ export default function Page() {
           variant="outline"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "हिंदी" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "हिंदी",
+                },
+              ],
+            });
           }}
           className="text-xs font-medium hover:bg-green-100 border-green-300 transition-colors"
         >
@@ -117,10 +152,15 @@ export default function Page() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "Property tax payment information" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "Property tax payment information",
+                },
+              ],
+            });
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-green-50 hover:bg-green-100 border border-green-200 transition-colors"
         >
@@ -135,10 +175,15 @@ export default function Page() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "Water bill payment" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "Water bill payment",
+                },
+              ],
+            });
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
         >
@@ -151,10 +196,15 @@ export default function Page() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "Birth certificate application" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "Birth certificate application",
+                },
+              ],
+            });
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 transition-colors"
         >
@@ -167,10 +217,15 @@ export default function Page() {
           variant="ghost"
           size="sm"
           onClick={() => {
-            handleInputChange({
-              target: { value: "Business license information" },
-            } as React.ChangeEvent<HTMLInputElement>);
-            setTimeout(() => handleSubmit(), 100);
+            sendMessage({
+              role: "user",
+              parts: [
+                {
+                  type: "text",
+                  text: "Business license information",
+                },
+              ],
+            });
           }}
           className="text-xs h-auto p-3 text-left justify-start bg-purple-50 hover:bg-purple-100 border border-purple-200 transition-colors"
         >
@@ -291,7 +346,14 @@ export default function Page() {
                   {m.role !== "user" && (
                     <div className="w-full flex justify-start">
                       <div className="rounded-2xl rounded-tl-md p-3 border border-gray-200 w-fit max-w-[320px] bg-white shadow-sm">
-                        <MemoizedMarkdown id={m.id} content={m.content} />
+                        <MemoizedMarkdown
+                          id={m.id}
+                          content={m.parts
+                            .map((part) =>
+                              part.type === "text" ? part.text : "",
+                            )
+                            .join("")}
+                        />
                       </div>
                     </div>
                   )}
@@ -332,7 +394,7 @@ export default function Page() {
                       ? "Please select language first..."
                       : "Ask about KMC services..."
                   }
-                  onChange={handleInputChange}
+                  onChange={(e) => setInput(e.target.value)}
                   disabled={!hasLanguagePreference && messages.length > 0}
                 />
                 <Button
