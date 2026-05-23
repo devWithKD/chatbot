@@ -339,7 +339,14 @@ export default function Page() {
                   {m.role === "user" && (
                     <div className="w-full flex justify-end">
                       <div className="rounded-2xl rounded-tr-md p-3 border border-blue-200 w-fit max-w-[280px] bg-blue-600 text-white shadow-sm">
-                        <p className="text-sm">{m.content}</p>
+                        <p className="text-sm">
+                          {" "}
+                          {m.parts.map((part, index) =>
+                            part.type === "text" ? (
+                              <span key={index}>{part.text}</span>
+                            ) : null,
+                          )}
+                        </p>
                       </div>
                     </div>
                   )}

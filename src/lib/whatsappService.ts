@@ -1,231 +1,261 @@
 // src/lib/whatsappService.ts - Part 1: Core Class & Language Handling
-import twilio from 'twilio';
-import { google } from '@ai-sdk/google';
-import { streamText } from 'ai';
-import { Redis } from '@upstash/redis';
-import { kmcContextTool } from './kmcContextTool';
+import twilio from "twilio";
+import { google } from "@ai-sdk/google";
+import { streamText } from "ai";
+import { Redis } from "@upstash/redis";
+import { kmcContextTool } from "./kmcContextTool";
 
 interface ChatMessage {
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp?: Date;
+  role: "user" | "assistant" | "system";
+  content: string;
+  timestamp?: Date;
 }
 
 interface MenuOption {
-    number: string;
-    english: string;
-    marathi: string;
-    hindi: string;
-    category: string;
+  number: string;
+  english: string;
+  marathi: string;
+  hindi: string;
+  category: string;
 }
 
 export class WhatsAppService {
-    private twilioClient: twilio.Twilio;
-    private redis: Redis;
+  private twilioClient: twilio.Twilio;
+  private redis: Redis;
 
-    // Updated menu options with Disaster Management as #1
-    private menuOptions: MenuOption[] = [
-        {
-            number: "1",
-            english: "🚨 Disaster Management",
-            marathi: "🚨 आपत्ती व्यवस्थापन",
-            hindi: "🚨 आपदा प्रबंधन",
-            category: "disasterManagement"
-        },
-        {
-            number: "2",
-            english: "Property Tax Payment",
-            marathi: "मिळकत कर भरणा",
-            hindi: "संपत्ति कर भुगतान",
-            category: "propertyTax"
-        },
-        {
-            number: "3",
-            english: "Water Bill Payment",
-            marathi: "पाणी बिल भरणा",
-            hindi: "पानी का बिल भुगतान",
-            category: "waterSupply"
-        },
-        {
-            number: "4",
-            english: "Birth Certificate",
-            marathi: "जन्म प्रमाणपत्र",
-            hindi: "जन्म प्रमाण पत्र",
-            category: "birthCertificate"
-        },
-        {
-            number: "5",
-            english: "Death Certificate",
-            marathi: "मृत्यू प्रमाणपत्र",
-            hindi: "मृत्यु प्रमाण पत्र",
-            category: "deathCertificate"
-        },
-        {
-            number: "6",
-            english: "Business License",
-            marathi: "व्यवसाय परवाना",
-            hindi: "व्यापार लाइसेंस",
-            category: "businessLicense"
-        },
-        {
-            number: "7",
-            english: "Register Complaint",
-            marathi: "तक्रार नोंदवा",
-            hindi: "शिकायत दर्ज करें",
-            category: "complaint"
-        },
-        {
-            number: "8",
-            english: "Contact Information",
-            marathi: "संपर्क माहिती",
-            hindi: "संपर्क जानकारी",
-            category: "contact"
-        },
-        {
-            number: "9",
-            english: "Other / Type your question",
-            marathi: "इतर / आपला प्रश्न टाइप करा",
-            hindi: "अन्य / अपना प्रश्न टाइप करें",
-            category: "freeText"
-        }
-    ];
+  // Updated menu options with Disaster Management as #1
+  private menuOptions: MenuOption[] = [
+    {
+      number: "1",
+      english: "🚨 Disaster Management",
+      marathi: "🚨 आपत्ती व्यवस्थापन",
+      hindi: "🚨 आपदा प्रबंधन",
+      category: "disasterManagement",
+    },
+    {
+      number: "2",
+      english: "Property Tax Payment",
+      marathi: "मिळकत कर भरणा",
+      hindi: "संपत्ति कर भुगतान",
+      category: "propertyTax",
+    },
+    {
+      number: "3",
+      english: "Water Bill Payment",
+      marathi: "पाणी बिल भरणा",
+      hindi: "पानी का बिल भुगतान",
+      category: "waterSupply",
+    },
+    {
+      number: "4",
+      english: "Birth Certificate",
+      marathi: "जन्म प्रमाणपत्र",
+      hindi: "जन्म प्रमाण पत्र",
+      category: "birthCertificate",
+    },
+    {
+      number: "5",
+      english: "Death Certificate",
+      marathi: "मृत्यू प्रमाणपत्र",
+      hindi: "मृत्यु प्रमाण पत्र",
+      category: "deathCertificate",
+    },
+    {
+      number: "6",
+      english: "Business License",
+      marathi: "व्यवसाय परवाना",
+      hindi: "व्यापार लाइसेंस",
+      category: "businessLicense",
+    },
+    {
+      number: "7",
+      english: "Register Complaint",
+      marathi: "तक्रार नोंदवा",
+      hindi: "शिकायत दर्ज करें",
+      category: "complaint",
+    },
+    {
+      number: "8",
+      english: "Contact Information",
+      marathi: "संपर्क माहिती",
+      hindi: "संपर्क जानकारी",
+      category: "contact",
+    },
+    {
+      number: "9",
+      english: "Other / Type your question",
+      marathi: "इतर / आपला प्रश्न टाइप करा",
+      hindi: "अन्य / अपना प्रश्न टाइप करें",
+      category: "freeText",
+    },
+  ];
 
-    constructor(accountSid: string, authToken: string) {
-        this.twilioClient = twilio(accountSid, authToken);
+  constructor(accountSid: string, authToken: string) {
+    this.twilioClient = twilio(accountSid, authToken);
 
-        // Initialize Upstash Redis
-        this.redis = new Redis({
-            url: process.env.UPSTASH_REDIS_REST_URL!,
-            token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-        });
-    }
+    // Initialize Upstash Redis
+    this.redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+  }
 
-    async handleIncomingMessage(from: string, body: string): Promise<string> {
+  async handleIncomingMessage(from: string, body: string): Promise<string> {
+    try {
+      const phoneNumber = from.replace("whatsapp:", "");
+
+      // Get data from Redis with proper typing
+      const historyData = await this.redis.get(`chat:${phoneNumber}`);
+      const userState =
+        (await this.redis.get(`state:${phoneNumber}`)) || "initial";
+      const userLanguage = (await this.redis.get(`lang:${phoneNumber}`)) || "";
+
+      // Parse history data safely
+      let history: ChatMessage[] = [];
+      if (historyData && Array.isArray(historyData)) {
+        history = historyData as ChatMessage[];
+      } else if (typeof historyData === "string") {
         try {
-            const phoneNumber = from.replace('whatsapp:', '');
-
-            // Get data from Redis with proper typing
-            const historyData = await this.redis.get(`chat:${phoneNumber}`);
-            const userState = await this.redis.get(`state:${phoneNumber}`) || 'initial';
-            const userLanguage = await this.redis.get(`lang:${phoneNumber}`) || '';
-
-            // Parse history data safely
-            let history: ChatMessage[] = [];
-            if (historyData && Array.isArray(historyData)) {
-                history = historyData as ChatMessage[];
-            } else if (typeof historyData === 'string') {
-                try {
-                    history = JSON.parse(historyData);
-                } catch {
-                    history = [];
-                }
-            }
-
-            console.log(`🔍 DEBUG: Phone: ${phoneNumber}, State: ${userState}, Message: "${body}", History length: ${history.length}`);
-
-            // Check if it's the first message or initial state
-            if (history.length === 0 && userState === 'initial') {
-                await this.redis.setex(`state:${phoneNumber}`, 3600, 'language_selection'); // 1 hour TTL
-                console.log(`✅ Set state to language_selection for ${phoneNumber}`);
-                return this.getLanguageSelectionMessage();
-            }
-
-            // Handle language selection
-            if (userState === 'language_selection') {
-                const language = this.handleLanguageSelection(body, phoneNumber);
-                if (language) {
-                    console.log(`✅ Language selected: ${language} for ${phoneNumber}`);
-                    await this.redis.setex(`lang:${phoneNumber}`, 3600, language);
-                    await this.redis.setex(`state:${phoneNumber}`, 3600, 'menu_shown');
-                    return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
-                } else {
-                    console.log(`❌ Invalid language choice: "${body}" for ${phoneNumber}`);
-                    return this.getLanguageSelectionMessage();
-                }
-            }
-
-            // Handle disaster management sub-menu
-            if (userState === 'disaster_submenu') {
-                const language = (userLanguage as string) || 'english';
-                const subOption = this.parseDisasterSubMenu(body);
-                if (subOption) {
-                    const response = await this.handleDisasterSubMenu(subOption, phoneNumber, language);
-                    await this.updateConversationHistory(phoneNumber, body, response);
-                    return response;
-                } else {
-                    // Invalid option, show disaster submenu again
-                    return this.getDisasterSubMenu(language);
-                }
-            }
-
-            // Check if user selected a numbered option
-            const selectedOption = this.parseMenuSelection(body);
-            if (selectedOption) {
-                const language = (userLanguage as string) || 'english';
-                const response = await this.handleMenuSelection(selectedOption, phoneNumber, language);
-
-                // Update history in Redis
-                await this.updateConversationHistory(phoneNumber, body, response);
-
-                return response;
-            }
-
-            // Handle free text or show menu again if user seems lost
-            if (this.shouldShowMenu(body)) {
-                const language = (userLanguage as string) || 'english';
-                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
-            }
-
-            // Process with AI for free text
-            const language = (userLanguage as string) || 'english';
-            const response = await this.processWithKMCAI(body, history, language);
-
-            // Update conversation history in Redis
-            await this.updateConversationHistory(phoneNumber, body, response);
-
-            // Add menu reminder at the end
-            return response + "\n\n" + this.getMenuReminder(language);
-
-        } catch (error) {
-            console.error('❌ WhatsApp message processing error:', error);
-            return "Sorry, I'm having trouble right now. Type 'menu' to see options or contact KMC at 0231-2540291.";
+          history = JSON.parse(historyData);
+        } catch {
+          history = [];
         }
-    }
+      }
 
-    private async updateConversationHistory(phoneNumber: string, userMessage: string, botResponse: string): Promise<void> {
+      console.log(
+        `🔍 DEBUG: Phone: ${phoneNumber}, State: ${userState}, Message: "${body}", History length: ${history.length}`,
+      );
+
+      // Check if it's the first message or initial state
+      if (history.length === 0 && userState === "initial") {
+        await this.redis.setex(
+          `state:${phoneNumber}`,
+          3600,
+          "language_selection",
+        ); // 1 hour TTL
+        console.log(`✅ Set state to language_selection for ${phoneNumber}`);
+        return this.getLanguageSelectionMessage();
+      }
+
+      // Handle language selection
+      if (userState === "language_selection") {
+        const language = this.handleLanguageSelection(body, phoneNumber);
+        if (language) {
+          console.log(`✅ Language selected: ${language} for ${phoneNumber}`);
+          await this.redis.setex(`lang:${phoneNumber}`, 3600, language);
+          await this.redis.setex(`state:${phoneNumber}`, 3600, "menu_shown");
+          return this.getMainMenuMessage(
+            language as "english" | "marathi" | "hindi",
+          );
+        } else {
+          console.log(
+            `❌ Invalid language choice: "${body}" for ${phoneNumber}`,
+          );
+          return this.getLanguageSelectionMessage();
+        }
+      }
+
+      // Handle disaster management sub-menu
+      if (userState === "disaster_submenu") {
+        const language = (userLanguage as string) || "english";
+        const subOption = this.parseDisasterSubMenu(body);
+        if (subOption) {
+          const response = await this.handleDisasterSubMenu(
+            subOption,
+            phoneNumber,
+            language,
+          );
+          await this.updateConversationHistory(phoneNumber, body, response);
+          return response;
+        } else {
+          // Invalid option, show disaster submenu again
+          return this.getDisasterSubMenu(language);
+        }
+      }
+
+      // Check if user selected a numbered option
+      const selectedOption = this.parseMenuSelection(body);
+      if (selectedOption) {
+        const language = (userLanguage as string) || "english";
+        const response = await this.handleMenuSelection(
+          selectedOption,
+          phoneNumber,
+          language,
+        );
+
+        // Update history in Redis
+        await this.updateConversationHistory(phoneNumber, body, response);
+
+        return response;
+      }
+
+      // Handle free text or show menu again if user seems lost
+      if (this.shouldShowMenu(body)) {
+        const language = (userLanguage as string) || "english";
+        return this.getMainMenuMessage(
+          language as "english" | "marathi" | "hindi",
+        );
+      }
+
+      // Process with AI for free text
+      const language = (userLanguage as string) || "english";
+      const response = await this.processWithKMCAI(body, history, language);
+
+      // Update conversation history in Redis
+      await this.updateConversationHistory(phoneNumber, body, response);
+
+      // Add menu reminder at the end
+      return response + "\n\n" + this.getMenuReminder(language);
+    } catch (error) {
+      console.error("❌ WhatsApp message processing error:", error);
+      return "Sorry, I'm having trouble right now. Type 'menu' to see options or contact KMC at 0231-2540291.";
+    }
+  }
+
+  private async updateConversationHistory(
+    phoneNumber: string,
+    userMessage: string,
+    botResponse: string,
+  ): Promise<void> {
+    try {
+      // Get existing history
+      const historyData = (await this.redis.get(`chat:${phoneNumber}`)) || [];
+      let history: ChatMessage[] = [];
+
+      if (Array.isArray(historyData)) {
+        history = historyData as ChatMessage[];
+      } else if (typeof historyData === "string") {
         try {
-            // Get existing history
-            const historyData = await this.redis.get(`chat:${phoneNumber}`) || [];
-            let history: ChatMessage[] = [];
-
-            if (Array.isArray(historyData)) {
-                history = historyData as ChatMessage[];
-            } else if (typeof historyData === 'string') {
-                try {
-                    history = JSON.parse(historyData);
-                } catch {
-                    history = [];
-                }
-            }
-
-            // Add new messages
-            history.push(
-                { role: 'user', content: userMessage, timestamp: new Date() },
-                { role: 'assistant', content: botResponse, timestamp: new Date() }
-            );
-
-            // Keep only last 20 messages and save to Redis with 1 hour TTL
-            const recentHistory = history.slice(-20);
-            await this.redis.setex(`chat:${phoneNumber}`, 3600, JSON.stringify(recentHistory));
-
-            console.log(`💾 Updated conversation history for ${phoneNumber}, total messages: ${recentHistory.length}`);
-        } catch (error) {
-            console.error('❌ Failed to update conversation history:', error);
+          history = JSON.parse(historyData);
+        } catch {
+          history = [];
         }
-    }
+      }
 
-    private getLanguageSelectionMessage(): string {
-        return `🏛️ *Welcome to Kolhapur Municipal Corporation*
+      // Add new messages
+      history.push(
+        { role: "user", content: userMessage, timestamp: new Date() },
+        { role: "assistant", content: botResponse, timestamp: new Date() },
+      );
+
+      // Keep only last 20 messages and save to Redis with 1 hour TTL
+      const recentHistory = history.slice(-20);
+      await this.redis.setex(
+        `chat:${phoneNumber}`,
+        3600,
+        JSON.stringify(recentHistory),
+      );
+
+      console.log(
+        `💾 Updated conversation history for ${phoneNumber}, total messages: ${recentHistory.length}`,
+      );
+    } catch (error) {
+      console.error("❌ Failed to update conversation history:", error);
+    }
+  }
+
+  private getLanguageSelectionMessage(): string {
+    return `🏛️ *Welcome to Kolhapur Municipal Corporation*
 कोल्हापूर महानगरपालिकेत आपले स्वागत आहे
 
 Please choose your language / कृपया आपली भाषा निवडा:
@@ -235,169 +265,228 @@ Please choose your language / कृपया आपली भाषा नि�
 *3* - हिंदी (Hindi)
 
 Reply with the number of your choice.`;
+  }
+
+  private handleLanguageSelection(
+    message: string,
+    phoneNumber: string,
+  ): string | null {
+    const choice = message.trim().toLowerCase();
+
+    console.log(`🔍 Language selection input: "${choice}" for ${phoneNumber}`);
+
+    if (choice === "1" || choice.includes("english")) {
+      console.log(`✅ Language set to English for ${phoneNumber}`);
+      return "english";
+    } else if (
+      choice === "2" ||
+      choice.includes("मराठी") ||
+      choice.includes("marathi")
+    ) {
+      console.log(`✅ Language set to Marathi for ${phoneNumber}`);
+      return "marathi";
+    } else if (
+      choice === "3" ||
+      choice.includes("हिंदी") ||
+      choice.includes("hindi")
+    ) {
+      console.log(`✅ Language set to Hindi for ${phoneNumber}`);
+      return "hindi";
     }
 
-    private handleLanguageSelection(message: string, phoneNumber: string): string | null {
-        const choice = message.trim().toLowerCase();
+    console.log(`❌ No language match for: "${choice}"`);
+    return null;
+  }
 
-        console.log(`🔍 Language selection input: "${choice}" for ${phoneNumber}`);
+  private getMainMenuMessage(
+    language: "english" | "marathi" | "hindi",
+  ): string {
+    const header = {
+      english: "🏛️ *KMC Services Menu*\nWhat can I help you with today?",
+      marathi: "🏛️ *KMC सेवा मेनू*\nआज मी तुमची काय मदत करू शकतो?",
+      hindi: "🏛️ *KMC सेवा मेनू*\nआज मैं आपकी क्या मदत कर सकता हूं?",
+    };
 
-        if (choice === '1' || choice.includes('english')) {
-            console.log(`✅ Language set to English for ${phoneNumber}`);
-            return 'english';
-        } else if (choice === '2' || choice.includes('मराठी') || choice.includes('marathi')) {
-            console.log(`✅ Language set to Marathi for ${phoneNumber}`);
-            return 'marathi';
-        } else if (choice === '3' || choice.includes('हिंदी') || choice.includes('hindi')) {
-            console.log(`✅ Language set to Hindi for ${phoneNumber}`);
-            return 'hindi';
-        }
+    const footer = {
+      english: "\n💬 *Choose a number (1-9) or type your question directly*",
+      marathi: "\n💬 *संख्या निवडा (1-9) किंवा आपला प्रश्न थेट टाइप करा*",
+      hindi: "\n💬 *संख्या चुनें (1-9) या अपना प्रश्न सीधे टाइप करें*",
+    };
 
-        console.log(`❌ No language match for: "${choice}"`);
+    let menu = header[language] + "\n\n";
+
+    this.menuOptions.forEach((option) => {
+      const text =
+        language === "marathi"
+          ? option.marathi
+          : language === "hindi"
+            ? option.hindi
+            : option.english;
+      menu += `*${option.number}* - ${text}\n`;
+    });
+
+    menu += footer[language];
+
+    return menu;
+  }
+
+  // Utility methods
+  private shouldShowMenu(body: string): boolean {
+    const menuTriggers = [
+      "menu",
+      "help",
+      "options",
+      "services",
+      "मेनू",
+      "मदत",
+      "सेवा",
+      "मेन्यू",
+      "सहायता",
+    ];
+    return menuTriggers.some((trigger) => body.toLowerCase().includes(trigger));
+  }
+
+  private getMenuReminder(language: string): string {
+    const reminder = {
+      english:
+        "💬 Type 'menu' to see all options again or contact us at 0231-2540291",
+      marathi:
+        "💬 सर्व पर्याय पुन्हा पाहण्यासाठी 'menu' टाइप करा किंवा 0231-2540291 वर संपर्क करा",
+      hindi:
+        "💬 सभी विकल्प फिर से देखने के लिए 'menu' टाइप करें या 0231-2540291 पर संपर्क करें",
+    };
+    return `---\n${reminder[language as "english" | "marathi" | "hindi"]}`;
+  }
+
+  async sendMessage(to: string, message: string): Promise<void> {
+    await this.twilioClient.messages.create({
+      from: process.env.TWILIO_WHATSAPP_NUMBER!,
+      to: to,
+      body: message,
+    });
+  }
+
+  // Handle commands like /help, /clear, etc.
+  async handleCommand(
+    command: string,
+    phoneNumber: string,
+  ): Promise<string | null> {
+    const cmd = command.toLowerCase().trim();
+
+    switch (cmd) {
+      case "/help":
+        const userLanguage =
+          (await this.redis.get(`lang:${phoneNumber}`)) || "english";
+        return this.getMainMenuMessage(
+          userLanguage as "english" | "marathi" | "hindi",
+        );
+
+      case "/clear":
+        // Clear all Redis data for this user
+        await this.redis.del(`chat:${phoneNumber}`);
+        await this.redis.del(`lang:${phoneNumber}`);
+        await this.redis.del(`state:${phoneNumber}`);
+        await this.redis.del(`context:${phoneNumber}`);
+        console.log(`🗑️ Cleared all data for ${phoneNumber}`);
+        return "✅ Conversation history cleared! You can start fresh.";
+
+      case "/menu":
+        const language =
+          (await this.redis.get(`lang:${phoneNumber}`)) || "english";
+        return this.getMainMenuMessage(
+          language as "english" | "marathi" | "hindi",
+        );
+
+      default:
         return null;
     }
+  }
 
-    private getMainMenuMessage(language: 'english' | 'marathi' | 'hindi'): string {
-        const header = {
-            english: "🏛️ *KMC Services Menu*\nWhat can I help you with today?",
-            marathi: "🏛️ *KMC सेवा मेनू*\nआज मी तुमची काय मदत करू शकतो?",
-            hindi: "🏛️ *KMC सेवा मेनू*\nआज मैं आपकी क्या मदत कर सकता हूं?"
+  // src/lib/whatsappService.ts - Part 2: Menu Handling & Navigation
+  // Add these methods to the WhatsAppService class
+
+  private parseMenuSelection(message: string): MenuOption | null {
+    const trimmed = message.trim();
+
+    // Check for direct number selection (1, 2, 3, etc.)
+    const option = this.menuOptions.find((opt) => opt.number === trimmed);
+    if (option) return option;
+
+    // Check for text matching any option in any language
+    const lowerMessage = message.toLowerCase();
+    return (
+      this.menuOptions.find(
+        (opt) =>
+          lowerMessage.includes(opt.english.toLowerCase()) ||
+          lowerMessage.includes(opt.marathi.toLowerCase()) ||
+          lowerMessage.includes(opt.hindi.toLowerCase()),
+      ) || null
+    );
+  }
+
+  private async handleMenuSelection(
+    option: MenuOption,
+    phoneNumber: string,
+    language: string,
+  ): Promise<string> {
+    // Set user context for this service in Redis
+    await this.redis.setex(
+      `context:${phoneNumber}`,
+      3600,
+      `service_${option.category}`,
+    );
+
+    switch (option.category) {
+      case "disasterManagement":
+        // Set state to disaster submenu
+        await this.redis.setex(
+          `state:${phoneNumber}`,
+          3600,
+          "disaster_submenu",
+        );
+        return this.getDisasterSubMenu(language);
+
+      case "propertyTax":
+        return await this.getPropertyTaxInfo(language);
+
+      case "waterSupply":
+        return await this.getWaterSupplyInfo(language);
+
+      case "birthCertificate":
+      case "deathCertificate":
+        return await this.getCertificateInfo(option.category, language);
+
+      case "businessLicense":
+        return await this.getBusinessLicenseInfo(language);
+
+      case "complaint":
+        return await this.getComplaintInfo(language);
+
+      case "contact":
+        return this.getContactInfo(language);
+
+      case "freeText":
+        const prompt = {
+          english:
+            "Please type your question about KMC services, and I'll help you:",
+          marathi:
+            "कृपया KMC सेवांबद्दल आपला प्रश्न टाइप करा, मी तुमची मदत करेन:",
+          hindi:
+            "कृपया KMC सेवाओं के बारे में अपना प्रश्न टाइप करें, मैं आपकी सहायता करूंगा:",
         };
+        await this.redis.setex(`state:${phoneNumber}`, 3600, "free_text_mode");
+        return prompt[language as "english" | "marathi" | "hindi"];
 
-        const footer = {
-            english: "\n💬 *Choose a number (1-9) or type your question directly*",
-            marathi: "\n💬 *संख्या निवडा (1-9) किंवा आपला प्रश्न थेट टाइप करा*",
-            hindi: "\n💬 *संख्या चुनें (1-9) या अपना प्रश्न सीधे टाइप करें*"
-        };
-
-        let menu = header[language] + "\n\n";
-
-        this.menuOptions.forEach(option => {
-            const text = language === 'marathi' ? option.marathi :
-                language === 'hindi' ? option.hindi : option.english;
-            menu += `*${option.number}* - ${text}\n`;
-        });
-
-        menu += footer[language];
-
-        return menu;
+      default:
+        return this.getMainMenuMessage(
+          language as "english" | "marathi" | "hindi",
+        );
     }
+  }
 
-    // Utility methods
-    private shouldShowMenu(body: string): boolean {
-        const menuTriggers = ['menu', 'help', 'options', 'services', 'मेनू', 'मदत', 'सेवा', 'मेन्यू', 'सहायता'];
-        return menuTriggers.some(trigger => body.toLowerCase().includes(trigger));
-    }
-
-    private getMenuReminder(language: string): string {
-        const reminder = {
-            english: "💬 Type 'menu' to see all options again or contact us at 0231-2540291",
-            marathi: "💬 सर्व पर्याय पुन्हा पाहण्यासाठी 'menu' टाइप करा किंवा 0231-2540291 वर संपर्क करा",
-            hindi: "💬 सभी विकल्प फिर से देखने के लिए 'menu' टाइप करें या 0231-2540291 पर संपर्क करें"
-        };
-        return `---\n${reminder[language as 'english' | 'marathi' | 'hindi']}`;
-    }
-
-    async sendMessage(to: string, message: string): Promise<void> {
-        await this.twilioClient.messages.create({
-            from: process.env.TWILIO_WHATSAPP_NUMBER!,
-            to: to,
-            body: message
-        });
-    }
-
-    // Handle commands like /help, /clear, etc.
-    async handleCommand(command: string, phoneNumber: string): Promise<string | null> {
-        const cmd = command.toLowerCase().trim();
-
-        switch (cmd) {
-            case '/help':
-                const userLanguage = await this.redis.get(`lang:${phoneNumber}`) || 'english';
-                return this.getMainMenuMessage(userLanguage as 'english' | 'marathi' | 'hindi');
-
-            case '/clear':
-                // Clear all Redis data for this user
-                await this.redis.del(`chat:${phoneNumber}`);
-                await this.redis.del(`lang:${phoneNumber}`);
-                await this.redis.del(`state:${phoneNumber}`);
-                await this.redis.del(`context:${phoneNumber}`);
-                console.log(`🗑️ Cleared all data for ${phoneNumber}`);
-                return "✅ Conversation history cleared! You can start fresh.";
-
-            case '/menu':
-                const language = await this.redis.get(`lang:${phoneNumber}`) || 'english';
-                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
-
-            default:
-                return null;
-        }
-    }
-
-    // src/lib/whatsappService.ts - Part 2: Menu Handling & Navigation
-    // Add these methods to the WhatsAppService class
-
-    private parseMenuSelection(message: string): MenuOption | null {
-        const trimmed = message.trim();
-
-        // Check for direct number selection (1, 2, 3, etc.)
-        const option = this.menuOptions.find(opt => opt.number === trimmed);
-        if (option) return option;
-
-        // Check for text matching any option in any language
-        const lowerMessage = message.toLowerCase();
-        return this.menuOptions.find(opt =>
-            lowerMessage.includes(opt.english.toLowerCase()) ||
-            lowerMessage.includes(opt.marathi.toLowerCase()) ||
-            lowerMessage.includes(opt.hindi.toLowerCase())
-        ) || null;
-    }
-
-    private async handleMenuSelection(option: MenuOption, phoneNumber: string, language: string): Promise<string> {
-        // Set user context for this service in Redis
-        await this.redis.setex(`context:${phoneNumber}`, 3600, `service_${option.category}`);
-
-        switch (option.category) {
-            case 'disasterManagement':
-                // Set state to disaster submenu
-                await this.redis.setex(`state:${phoneNumber}`, 3600, 'disaster_submenu');
-                return this.getDisasterSubMenu(language);
-
-            case 'propertyTax':
-                return await this.getPropertyTaxInfo(language);
-
-            case 'waterSupply':
-                return await this.getWaterSupplyInfo(language);
-
-            case 'birthCertificate':
-            case 'deathCertificate':
-                return await this.getCertificateInfo(option.category, language);
-
-            case 'businessLicense':
-                return await this.getBusinessLicenseInfo(language);
-
-            case 'complaint':
-                return await this.getComplaintInfo(language);
-
-            case 'contact':
-                return this.getContactInfo(language);
-
-            case 'freeText':
-                const prompt = {
-                    english: "Please type your question about KMC services, and I'll help you:",
-                    marathi: "कृपया KMC सेवांबद्दल आपला प्रश्न टाइप करा, मी तुमची मदत करेन:",
-                    hindi: "कृपया KMC सेवाओं के बारे में अपना प्रश्न टाइप करें, मैं आपकी सहायता करूंगा:"
-                };
-                await this.redis.setex(`state:${phoneNumber}`, 3600, 'free_text_mode');
-                return prompt[language as 'english' | 'marathi' | 'hindi'];
-
-            default:
-                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
-        }
-    }
-
-    private getDisasterSubMenu(language: string): string {
-        if (language === 'marathi') {
-            return `🚨 *कोल्हापूर आपत्ती व्यवस्थापन विभाग*
+  private getDisasterSubMenu(language: string): string {
+    if (language === "marathi") {
+      return `🚨 *कोल्हापूर आपत्ती व्यवस्थापन विभाग*
 
 कोल्हापूर आपत्ती व्यवस्थापन विभागाच्या स्वयं माहिती प्रणालीमध्ये आपले स्वागत आहे.
 
@@ -412,8 +501,8 @@ Reply with the number of your choice.`;
 *5* - 🚗 रस्ते व वहातूक (Road and Transport)
 *6* - ⚠️ पुर पातळी नुसार पाणी भागात येण्याची संभाव्य ठिकाणे
 *7* - ⬅️ मुख्य मेनूवर परत या`;
-        } else if (language === 'hindi') {
-            return `🚨 *कोल्हापुर आपदा प्रबंधन विभाग*
+    } else if (language === "hindi") {
+      return `🚨 *कोल्हापुर आपदा प्रबंधन विभाग*
 
 कोल्हापुर आपदा प्रबंधन विभाग की स्वचालित सूचना प्रणाली में आपका स्वागत है।
 
@@ -428,8 +517,8 @@ Reply with the number of your choice.`;
 *5* - 🚗 सड़क और परिवहन (Road and Transport)
 *6* - ⚠️ बाढ़ स्तर के अनुसार जल प्रभावित क्षेत्र
 *7* - ⬅️ मुख्य मेनू पर वापस`;
-        } else {
-            return `🚨 *Kolhapur Disaster Management Department*
+    } else {
+      return `🚨 *Kolhapur Disaster Management Department*
 
 Welcome to Kolhapur Disaster Management Department's automated information system.
 
@@ -444,68 +533,108 @@ Example: If you need rainfall information, reply with *1*.
 *5* - 🚗 Roads & Transport
 *6* - ⚠️ Flood Prone Areas by Water Level
 *7* - ⬅️ Back to Main Menu`;
-        }
+    }
+  }
+
+  private parseDisasterSubMenu(message: string): string | null {
+    const trimmed = message.trim();
+
+    if (
+      trimmed === "1" ||
+      trimmed.toLowerCase().includes("rainfall") ||
+      trimmed.includes("पर्जन्यमान") ||
+      trimmed.includes("वर्षा")
+    ) {
+      return "rainfall";
+    } else if (
+      trimmed === "2" ||
+      trimmed.toLowerCase().includes("dam") ||
+      trimmed.includes("धरण") ||
+      trimmed.includes("बांध")
+    ) {
+      return "waterLevel";
+    } else if (
+      trimmed === "3" ||
+      trimmed.toLowerCase().includes("panchaganga") ||
+      trimmed.includes("पंचगंगा")
+    ) {
+      return "panchaganga";
+    } else if (
+      trimmed === "4" ||
+      trimmed.toLowerCase().includes("emergency") ||
+      trimmed.includes("आपत्कालीन") ||
+      trimmed.includes("आपातकालीन")
+    ) {
+      return "emergency";
+    } else if (
+      trimmed === "5" ||
+      trimmed.toLowerCase().includes("road") ||
+      trimmed.includes("रस्ते") ||
+      trimmed.includes("सड़क")
+    ) {
+      return "transport";
+    } else if (
+      trimmed === "6" ||
+      trimmed.toLowerCase().includes("flood") ||
+      trimmed.includes("पुर") ||
+      trimmed.includes("बाढ़")
+    ) {
+      return "floodProne";
+    } else if (
+      trimmed === "7" ||
+      trimmed.toLowerCase().includes("back") ||
+      trimmed.includes("परत") ||
+      trimmed.includes("वापस")
+    ) {
+      return "back";
     }
 
-    private parseDisasterSubMenu(message: string): string | null {
-        const trimmed = message.trim();
+    return null;
+  }
 
-        if (trimmed === '1' || trimmed.toLowerCase().includes('rainfall') || trimmed.includes('पर्जन्यमान') || trimmed.includes('वर्षा')) {
-            return 'rainfall';
-        } else if (trimmed === '2' || trimmed.toLowerCase().includes('dam') || trimmed.includes('धरण') || trimmed.includes('बांध')) {
-            return 'waterLevel';
-        } else if (trimmed === '3' || trimmed.toLowerCase().includes('panchaganga') || trimmed.includes('पंचगंगा')) {
-            return 'panchaganga';
-        } else if (trimmed === '4' || trimmed.toLowerCase().includes('emergency') || trimmed.includes('आपत्कालीन') || trimmed.includes('आपातकालीन')) {
-            return 'emergency';
-        } else if (trimmed === '5' || trimmed.toLowerCase().includes('road') || trimmed.includes('रस्ते') || trimmed.includes('सड़क')) {
-            return 'transport';
-        } else if (trimmed === '6' || trimmed.toLowerCase().includes('flood') || trimmed.includes('पुर') || trimmed.includes('बाढ़')) {
-            return 'floodProne';
-        } else if (trimmed === '7' || trimmed.toLowerCase().includes('back') || trimmed.includes('परत') || trimmed.includes('वापस')) {
-            return 'back';
-        }
-
-        return null;
+  private async handleDisasterSubMenu(
+    option: string,
+    phoneNumber: string,
+    language: string,
+  ): Promise<string> {
+    switch (option) {
+      case "rainfall":
+        return await this.getRainfallInfo(language);
+      case "waterLevel":
+        return await this.getWaterLevelInfo(language);
+      case "panchaganga":
+        return await this.getPanchagangaInfo(language);
+      case "emergency":
+        return await this.getEmergencyContacts(language);
+      case "transport":
+        return await this.getTransportInfo(language);
+      case "floodProne":
+        return await this.getFloodProneAreas(language);
+      case "back":
+        await this.redis.setex(`state:${phoneNumber}`, 3600, "menu_shown");
+        return this.getMainMenuMessage(
+          language as "english" | "marathi" | "hindi",
+        );
+      default:
+        return this.getDisasterSubMenu(language);
     }
+  }
 
-    private async handleDisasterSubMenu(option: string, phoneNumber: string, language: string): Promise<string> {
-        switch (option) {
-            case 'rainfall':
-                return await this.getRainfallInfo(language);
-            case 'waterLevel':
-                return await this.getWaterLevelInfo(language);
-            case 'panchaganga':
-                return await this.getPanchagangaInfo(language);
-            case 'emergency':
-                return await this.getEmergencyContacts(language);
-            case 'transport':
-                return await this.getTransportInfo(language);
-            case 'floodProne':
-                return await this.getFloodProneAreas(language);
-            case 'back':
-                await this.redis.setex(`state:${phoneNumber}`, 3600, 'menu_shown');
-                return this.getMainMenuMessage(language as 'english' | 'marathi' | 'hindi');
-            default:
-                return this.getDisasterSubMenu(language);
-        }
-    }
+  private getDisasterMenuReminder(language: string): string {
+    const reminder = {
+      english: "💬 Type 1-6 for disaster services or 7 to return to main menu",
+      marathi: "💬 आपत्ती सेवांसाठी 1-6 टाइप करा किंवा मुख्य मेनूसाठी 7",
+      hindi: "💬 आपदा सेवाओं के लिए 1-6 टाइप करें या मुख्य मेनू के लिए 7",
+    };
+    return `---\n${reminder[language as "english" | "marathi" | "hindi"]}`;
+  }
 
-    private getDisasterMenuReminder(language: string): string {
-        const reminder = {
-            english: "💬 Type 1-6 for disaster services or 7 to return to main menu",
-            marathi: "💬 आपत्ती सेवांसाठी 1-6 टाइप करा किंवा मुख्य मेनूसाठी 7",
-            hindi: "💬 आपदा सेवाओं के लिए 1-6 टाइप करें या मुख्य मेनू के लिए 7"
-        };
-        return `---\n${reminder[language as 'english' | 'marathi' | 'hindi']}`;
-    }
+  // src/lib/whatsappService.ts - Part 3: Disaster Management Services (Options 1-3)
+  // Add these methods to the WhatsAppService class
 
-    // src/lib/whatsappService.ts - Part 3: Disaster Management Services (Options 1-3)
-    // Add these methods to the WhatsAppService class
-
-    private async getRainfallInfo(language: string): Promise<string> {
-        const response = {
-            english: `🌧️ *Rainfall Information - Kolhapur District*
+  private async getRainfallInfo(language: string): Promise<string> {
+    const response = {
+      english: `🌧️ *Rainfall Information - Kolhapur District*
 *Date:* 25/06/2025, 6:00 PM
 
 *Today's Rainfall (mm):*
@@ -528,7 +657,7 @@ Example: If you need rainfall information, reply with *1*.
 ⚠️ *Weather Alert:* Heavy rainfall expected in next 24 hours
 *Contact:* 0231-2540291`,
 
-            marathi: `🌧️ *पर्जन्यमान माहिती - कोल्हापूर जिल्हा*
+      marathi: `🌧️ *पर्जन्यमान माहिती - कोल्हापूर जिल्हा*
 *दिनांक:* २५/०६/२०२५, संध्याकाळी ६:०० वा.
 
 *आजचा पाऊस (मि.मी.):*
@@ -551,7 +680,7 @@ Example: If you need rainfall information, reply with *1*.
 ⚠️ *हवामान इशारा:* पुढील २४ तासांत जोरदार पाऊस अपेक्षित
 *संपर्क:* ०२३१-२५४०२९१`,
 
-            hindi: `🌧️ *वर्षा जानकारी - कोल्हापुर जिला*
+      hindi: `🌧️ *वर्षा जानकारी - कोल्हापुर जिला*
 *दिनांक:* २५/०६/२०२५, शाम ६:०० बजे
 
 *आज की बारिश (मि.मी.):*
@@ -572,15 +701,19 @@ Example: If you need rainfall information, reply with *1*.
 *मानसून कुल:* १,२४७.३ मि.मी.
 
 ⚠️ *मौसम चेतावनी:* अगले २४ घंटों में भारी बारिश की संभावना
-*संपर्क:* ०२३१-२५४०२९१`
-        };
+*संपर्क:* ०२३१-२५४०२९१`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    private async getWaterLevelInfo(language: string): Promise<string> {
-        const response = {
-            english: `🌊 *Dam & Water Level Report - Kolhapur District*
+  private async getWaterLevelInfo(language: string): Promise<string> {
+    const response = {
+      english: `🌊 *Dam & Water Level Report - Kolhapur District*
 *Date:* 25/06/2025 at 5:00 PM
 
 *Major Dams:*
@@ -610,7 +743,7 @@ Example: If you need rainfall information, reply with *1*.
 ⚠️ *Alert:* Monitor river levels closely
 *Emergency:* 0231-2540291`,
 
-            marathi: `🌊 *धरण व पाणी पातळी अहवाल - कोल्हापूर जिल्हा*
+      marathi: `🌊 *धरण व पाणी पातळी अहवाल - कोल्हापूर जिल्हा*
 *दिनांक:* २५/०६/२०२५ संध्याकाळी ५:०० वा.
 
 *मुख्य धरणे:*
@@ -640,7 +773,7 @@ Example: If you need rainfall information, reply with *1*.
 ⚠️ *सतर्कता:* नदी पातळीवर बारीक निरीक्षण ठेवा
 *आपत्काल:* ०२३१-२५४०२९१`,
 
-            hindi: `🌊 *बांध और जल स्तर रिपोर्ट - कोल्हापुर जिला*
+      hindi: `🌊 *बांध और जल स्तर रिपोर्ट - कोल्हापुर जिला*
 *दिनांक:* २५/०६/२०२५ शाम ५:०० बजे
 
 *मुख्य बांध:*
@@ -668,15 +801,19 @@ Example: If you need rainfall information, reply with *1*.
 📍 दूधगंगा बांध: ७३.१% भरा
 
 ⚠️ *सतर्कता:* नदी स्तर पर निरंतर निगरानी रखें
-*आपातकाल:* ०२३१-२५४०२९१`
-        };
+*आपातकाल:* ०२३१-२५४०२९१`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    private async getPanchagangaInfo(language: string): Promise<string> {
-        const response = {
-            english: `🏞️ *Panchaganga River Water Level*
+  private async getPanchagangaInfo(language: string): Promise<string> {
+    const response = {
+      english: `🏞️ *Panchaganga River Water Level*
 *Date:* 25/06/2025, 6:00 PM
 
 *Panchaganga River Monitoring Points:*
@@ -710,7 +847,7 @@ Example: If you need rainfall information, reply with *1*.
 🚨 *Advisory:* Avoid riverbank activities
 *Emergency:* 0231-2540291`,
 
-            marathi: `🏞️ *पंचगंगा नदी पाणी पातळी*
+      marathi: `🏞️ *पंचगंगा नदी पाणी पातळी*
 *दिनांक:* २५/०६/२०२५, संध्याकाळी ६:०० वा.
 
 *पंचगंगा नदी निरीक्षण बिंदू:*
@@ -744,7 +881,7 @@ Example: If you need rainfall information, reply with *1*.
 🚨 *सल्ला:* नदीकाठी क्रियाकलाप टाळा
 *आपत्काल:* ०२३१-२५४०२९१`,
 
-            hindi: `🏞️ *पंचगंगा नदी जल स्तर*
+      hindi: `🏞️ *पंचगंगा नदी जल स्तर*
 *दिनांक:* २५/०६/२०२५, शाम ६:०० बजे
 
 *पंचगंगा नदी निगरानी बिंदु:*
@@ -776,18 +913,22 @@ Example: If you need rainfall information, reply with *1*.
 
 ⚠️ *चेतावनी:* कोल्हापुर शहर में जल स्तर बढ़ रहा है
 🚨 *सलाह:* नदी तटीय गतिविधियों से बचें
-*आपातकाल:* ०२३१-२५४०२९१`
-        };
+*आपातकाल:* ०२३१-२५४०२९१`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    // src/lib/whatsappService.ts - Part 4: Disaster Management Services (Options 4-6)
-    // Add these methods to the WhatsAppService class
+  // src/lib/whatsappService.ts - Part 4: Disaster Management Services (Options 4-6)
+  // Add these methods to the WhatsAppService class
 
-    private async getEmergencyContacts(language: string): Promise<string> {
-        const response = {
-            english: `📞 *Emergency Contacts - Disaster Management*
+  private async getEmergencyContacts(language: string): Promise<string> {
+    const response = {
+      english: `📞 *Emergency Contacts - Disaster Management*
 
 🚨 *KMC Emergency Control Room*
 Phone: 0231-2540291
@@ -820,7 +961,7 @@ Email: disaster@kmckolhapur.gov.in
 *Important:*
 Save these numbers in your phone for quick access during emergencies.`,
 
-            marathi: `📞 *आपत्कालीन संपर्क - आपत्ती व्यवस्थापन*
+      marathi: `📞 *आपत्कालीन संपर्क - आपत्ती व्यवस्थापन*
 
 🚨 *KMC आपत्कालीन नियंत्रण कक्ष*
 फोन: 0231-2540291
@@ -853,7 +994,7 @@ MSEB: 1912
 *महत्वाचे:*
 आपत्कालीन परिस्थितीत त्वरित संपर्कासाठी हे नंबर आपल्या फोनमध्ये सेव्ह करा.`,
 
-            hindi: `📞 *आपातकालीन संपर्क - आपदा प्रबंधन*
+      hindi: `📞 *आपातकालीन संपर्क - आपदा प्रबंधन*
 
 🚨 *KMC आपातकालीन नियंत्रण कक्ष*
 फोन: 0231-2540291
@@ -884,15 +1025,19 @@ MSEB: 1912
 ईमेल: disaster@kmckolhapur.gov.in
 
 *महत्वपूर्ण:*
-आपातकाल के दौरान त्वरित संपर्क के लिए इन नंबरों को अपने फोन में सेव करें।`
-        };
+आपातकाल के दौरान त्वरित संपर्क के लिए इन नंबरों को अपने फोन में सेव करें।`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    private async getTransportInfo(language: string): Promise<string> {
-        const response = {
-            english: `🚗 *Roads & Transport Status - Kolhapur District*
+  private async getTransportInfo(language: string): Promise<string> {
+    const response = {
+      english: `🚗 *Roads & Transport Status - Kolhapur District*
 *Updated:* 25/06/2025, 6:00 PM
 
 *Highway Status:*
@@ -921,7 +1066,7 @@ MSEB: 1912
 
 *Emergency:* 108 | *Traffic:* 103`,
 
-            marathi: `🚗 *रस्ते व वहातूक स्थिती - कोल्हापूर जिल्हा*
+      marathi: `🚗 *रस्ते व वहातूक स्थिती - कोल्हापूर जिल्हा*
 *अपडेट:* २५/०६/२०२५, संध्याकाळी ६:०० वा.
 
 *महामार्ग स्थिती:*
@@ -950,7 +1095,7 @@ MSEB: 1912
 
 *आपत्काल:* 108 | *वाहतूक:* 103`,
 
-            hindi: `🚗 *सड़क और परिवहन स्थिति - कोल्हापुर जिला*
+      hindi: `🚗 *सड़क और परिवहन स्थिति - कोल्हापुर जिला*
 *अपडेट:* २५/०६/२०२५, शाम ६:०० बजे
 
 *राजमार्ग स्थिति:*
@@ -977,15 +1122,19 @@ MSEB: 1912
 🚌 ST बस: सामान्य सेवा
 🚂 रेलवे: सभी ट्रेनें समय पर
 
-*आपातकाल:* 108 | *यातायात:* 103`
-        };
+*आपातकाल:* 108 | *यातायात:* 103`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    private async getFloodProneAreas(language: string): Promise<string> {
-        const response = {
-            english: `⚠️ *Flood Prone Areas by Water Level - Kolhapur District*
+  private async getFloodProneAreas(language: string): Promise<string> {
+    const response = {
+      english: `⚠️ *Flood Prone Areas by Water Level - Kolhapur District*
 *Updated:* 25/06/2025, 6:00 PM
 
 *HIGH RISK AREAS (Immediate Evacuation if water rises):*
@@ -1032,7 +1181,7 @@ MSEB: 1912
 *Emergency Helpline:* 0231-2540291
 *Rescue Team:* 112`,
 
-            marathi: `⚠️ *पुर पातळी नुसार पाणी भागात येण्याची संभाव्य ठिकाणे - कोल्हापूर जिल्हा*
+      marathi: `⚠️ *पुर पातळी नुसार पाणी भागात येण्याची संभाव्य ठिकाणे - कोल्हापूर जिल्हा*
 *अपडेट:* २५/०६/२०२५, संध्याकाळी ६:०० वा.
 
 *उच्च धोक्याची ठिकाणे (पाणी वाढल्यास तात्काळ स्थलांतर):*
@@ -1079,7 +1228,7 @@ MSEB: 1912
 *आपत्कालीन हेल्पलाइन:* ०२३१-२५४०२९१
 *बचाव पथक:* ११२`,
 
-            hindi: `⚠️ *बाढ़ स्तर के अनुसार जल प्रभावित संभावित क्षेत्र - कोल्हापुर जिला*
+      hindi: `⚠️ *बाढ़ स्तर के अनुसार जल प्रभावित संभावित क्षेत्र - कोल्हापुर जिला*
 *अपडेट:* २५/०६/२०२५, शाम ६:०० बजे
 
 *उच्च जोखिम क्षेत्र (पानी बढ़ने पर तत्काल निकासी):*
@@ -1124,18 +1273,22 @@ MSEB: 1912
 🟢 राधानगरी वन्यजीव अभयारण्य कार्यालय
 
 *आपातकालीन हेल्पलाइन:* ०२३१-२५४०२९१
-*बचाव दल:* ११२`
-        };
+*बचाव दल:* ११२`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getDisasterMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getDisasterMenuReminder(language)
+    );
+  }
 
-    // src/lib/whatsappService.ts - Part 5: Regular KMC Services
-    // Add these methods to the WhatsAppService class
+  // src/lib/whatsappService.ts - Part 5: Regular KMC Services
+  // Add these methods to the WhatsAppService class
 
-    private async getPropertyTaxInfo(language: string): Promise<string> {
-        const response = {
-            english: `📊 *Property Tax Payment Process*
+  private async getPropertyTaxInfo(language: string): Promise<string> {
+    const response = {
+      english: `📊 *Property Tax Payment Process*
 
 *Step-by-step guide:*
 1️⃣ Visit: https://web.kolhapurcorporation.gov.in/citizen
@@ -1154,7 +1307,7 @@ MSEB: 1912
 
 Would you like help with registration or have other questions?`,
 
-            marathi: `📊 *मिळकत कर भरण्याची प्रक्रिया*
+      marathi: `📊 *मिळकत कर भरण्याची प्रक्रिया*
 
 *चरणबद्ध मार्गदर्शन:*
 1️⃣ भेट द्या: https://web.kolhapurcorporation.gov.in/citizen
@@ -1173,7 +1326,7 @@ Would you like help with registration or have other questions?`,
 
 नोंदणीसाठी मदत हवी आहे किंवा इतर प्रश्न आहेत?`,
 
-            hindi: `📊 *संपत्ति कर भुगतान प्रक्रिया*
+      hindi: `📊 *संपत्ति कर भुगतान प्रक्रिया*
 
 *चरणबद्ध गाइड:*
 1️⃣ विजिट करें: https://web.kolhapurcorporation.gov.in/citizen
@@ -1190,15 +1343,19 @@ Would you like help with registration or have other questions?`,
 
 *संपर्क:* 0231-2540291
 
-क्या पंजीकरण में मदत चाहिए या अन्य प्रश्न हैं?`
-        };
+क्या पंजीकरण में मदत चाहिए या अन्य प्रश्न हैं?`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
 
-    private async getWaterSupplyInfo(language: string): Promise<string> {
-        const response = {
-            english: `💧 *Water Supply Services*
+  private async getWaterSupplyInfo(language: string): Promise<string> {
+    const response = {
+      english: `💧 *Water Supply Services*
 
 *Bill Payment Process:*
 1️⃣ Visit: https://web.kolhapurcorporation.gov.in/citizen
@@ -1217,7 +1374,7 @@ Would you like help with registration or have other questions?`,
 *Contact:* Water Engineer - Harshajit Dilipsinh Ghatage
 *Phone:* 0231-2540291`,
 
-            marathi: `💧 *पाणी पुरवठा सेवा*
+      marathi: `💧 *पाणी पुरवठा सेवा*
 
 *बिल भरण्याची प्रक्रिया:*
 1️⃣ भेट द्या: https://web.kolhapurcorporation.gov.in/citizen
@@ -1236,7 +1393,7 @@ Would you like help with registration or have other questions?`,
 *संपर्क:* पाणी अभियंता - हर्षजित दिलीपसिंह घाटगे
 *फोन:* 0231-2540291`,
 
-            hindi: `💧 *जल आपूर्ति सेवाएं*
+      hindi: `💧 *जल आपूर्ति सेवाएं*
 
 *बिल भुगतान प्रक्रिया:*
 1️⃣ विजिट करें: https://web.kolhapurcorporation.gov.in/citizen
@@ -1253,76 +1410,90 @@ Would you like help with registration or have other questions?`,
 *महत्वपूर्ण:* देर से भुगतान के लिए 1% मासिक जुर्माना
 
 *संपर्क:* जल अभियंता - हर्षजित दिलीपसिंह घाटगे
-*फोन:* 0231-2540291`
-        };
+*फोन:* 0231-2540291`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
 
-    private async getCertificateInfo(type: string, language: string): Promise<string> {
-        const isBirth = type === 'birthCertificate';
-        const response = {
-            english: `📋 *${isBirth ? 'Birth' : 'Death'} Certificate Application*
+  private async getCertificateInfo(
+    type: string,
+    language: string,
+  ): Promise<string> {
+    const isBirth = type === "birthCertificate";
+    const response = {
+      english: `📋 *${isBirth ? "Birth" : "Death"} Certificate Application*
 
 *Online Process:*
 1️⃣ Visit: https://web.kolhapurcorporation.gov.in/citizen
 2️⃣ Register/Login to citizen portal
 3️⃣ Navigate to Service #7: 'जन्म व मृत्यू नोंदणी प्रमाणपत्र'
-4️⃣ Select '${isBirth ? 'Birth' : 'Death'} Certificate'
+4️⃣ Select '${isBirth ? "Birth" : "Death"} Certificate'
 5️⃣ Fill required details
 6️⃣ Upload documents and pay fees
 
 *Required Documents:*
-${isBirth ?
-                    '• Hospital discharge papers\n• Parents\' Aadhar cards\n• Parents\' marriage certificate' :
-                    '• Death certificate from hospital\n• Deceased person\'s Aadhar\n• Family member\'s ID proof'
-                }
+${
+  isBirth
+    ? "• Hospital discharge papers\n• Parents' Aadhar cards\n• Parents' marriage certificate"
+    : "• Death certificate from hospital\n• Deceased person's Aadhar\n• Family member's ID proof"
+}
 
 *Contact:* 0231-2540291`,
 
-            marathi: `📋 *${isBirth ? 'जन्म' : 'मृत्यू'} प्रमाणपत्र अर्ज*
+      marathi: `📋 *${isBirth ? "जन्म" : "मृत्यू"} प्रमाणपत्र अर्ज*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ भेट द्या: https://web.kolhapurcorporation.gov.in/citizen
 2️⃣ नागरिक पोर्टलवर नोंदणी/लॉगिन करा
 3️⃣ सेवा #7 वर जा: 'जन्म व मृत्यू नोंदणी प्रमाणपत्र'
-4️⃣ '${isBirth ? 'जन्म' : 'मृत्यू'} प्रमाणपत्र' निवडा
+4️⃣ '${isBirth ? "जन्म" : "मृत्यू"} प्रमाणपत्र' निवडा
 5️⃣ आवश्यक तपशील भरा
 6️⃣ कागदपत्रे अपलोड करा आणि फी भरा
 
 *आवश्यक कागदपत्रे:*
-${isBirth ?
-                    '• हॉस्पिटल डिस्चार्ज पेपर्स\n• पालकांचे आधार कार्ड\n• पालकांचे लग्न प्रमाणपत्र' :
-                    '• हॉस्पिटलकडून मृत्यू प्रमाणपत्र\n• मृत व्यक्तीचे आधार\n• कुटुंबातील सदस्याचा आयडी पुरावा'
-                }
+${
+  isBirth
+    ? "• हॉस्पिटल डिस्चार्ज पेपर्स\n• पालकांचे आधार कार्ड\n• पालकांचे लग्न प्रमाणपत्र"
+    : "• हॉस्पिटलकडून मृत्यू प्रमाणपत्र\n• मृत व्यक्तीचे आधार\n• कुटुंबातील सदस्याचा आयडी पुरावा"
+}
 
 *संपर्क:* 0231-2540291`,
 
-            hindi: `📋 *${isBirth ? 'जन्म' : 'मृत्यु'} प्रमाण पत्र आवेदन*
+      hindi: `📋 *${isBirth ? "जन्म" : "मृत्यु"} प्रमाण पत्र आवेदन*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ विजिट करें: https://web.kolhapurcorporation.gov.in/citizen
 2️⃣ नागरिक पोर्टल पर पंजीकरण/लॉगिन करें
 3️⃣ सेवा #7 पर जाएं: 'जन्म व मृत्यू नोंदणी प्रमाणपत्र'
-4️⃣ '${isBirth ? 'जन्म' : 'मृत्यु'} प्रमाण पत्र' चुनें
+4️⃣ '${isBirth ? "जन्म" : "मृत्यु"} प्रमाण पत्र' चुनें
 5️⃣ आवश्यक विवरण भरें
 6️⃣ दस्तावेज अपलोड करें और शुल्क भरें
 
 *आवश्यक दस्तावेज:*
-${isBirth ?
-                    '• अस्पताल डिस्चार्ज पेपर्स\n• माता-पिता के आधार कार्ड\n• माता-पिता का विवाह प्रमाण पत्र' :
-                    '• अस्पताल से मृत्यु प्रमाण पत्र\n• मृतक व्यक्ति का आधार\n• परिवार के सदस्य का आईडी प्रूफ'
-                }
+${
+  isBirth
+    ? "• अस्पताल डिस्चार्ज पेपर्स\n• माता-पिता के आधार कार्ड\n• माता-पिता का विवाह प्रमाण पत्र"
+    : "• अस्पताल से मृत्यु प्रमाण पत्र\n• मृतक व्यक्ति का आधार\n• परिवार के सदस्य का आईडी प्रूफ"
+}
 
-*संपर्क:* 0231-2540291`
-        };
+*संपर्क:* 0231-2540291`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
 
-    private async getBusinessLicenseInfo(language: string): Promise<string> {
-        const response = {
-            english: `📄 *Business License Application*
+  private async getBusinessLicenseInfo(language: string): Promise<string> {
+    const response = {
+      english: `📄 *Business License Application*
 
 *Online Process:*
 1️⃣ Visit: https://web.kolhapurcorporation.gov.in/citizen
@@ -1340,7 +1511,7 @@ ${isBirth ?
 
 *Contact:* 0231-2540291`,
 
-            marathi: `📄 *व्यवसाय परवाना अर्ज*
+      marathi: `📄 *व्यवसाय परवाना अर्ज*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ भेट द्या: https://web.kolhapurcorporation.gov.in/citizen
@@ -1358,7 +1529,7 @@ ${isBirth ?
 
 *संपर्क:* 0231-2540291`,
 
-            hindi: `📄 *व्यापार लाइसेंस आवेदन*
+      hindi: `📄 *व्यापार लाइसेंस आवेदन*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ विजिट करें: https://web.kolhapurcorporation.gov.in/citizen
@@ -1374,15 +1545,19 @@ ${isBirth ?
 - दुकान स्थापना दस्तावेज
 - अग्निशमन विभाग से NOC (यदि आवश्यक हो)
 
-*संपर्क:* 0231-2540291`
-        };
+*संपर्क:* 0231-2540291`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
 
-    private async getComplaintInfo(language: string): Promise<string> {
-        const response = {
-            english: `📝 *Register Complaint*
+  private async getComplaintInfo(language: string): Promise<string> {
+    const response = {
+      english: `📝 *Register Complaint*
 
 *Online Process:*
 1️⃣ Visit: https://web.kolhapurcorporation.gov.in/citizen
@@ -1401,7 +1576,7 @@ ${isBirth ?
 
 *Emergency Contact:* 0231-2540291`,
 
-            marathi: `📝 *तक्रार नोंदवा*
+      marathi: `📝 *तक्रार नोंदवा*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ भेट द्या: https://web.kolhapurcorporation.gov.in/citizen
@@ -1420,7 +1595,7 @@ ${isBirth ?
 
 *आपत्कालीन संपर्क:* 0231-2540291`,
 
-            hindi: `📝 *शिकायत दर्ज करें*
+      hindi: `📝 *शिकायत दर्ज करें*
 
 *ऑनलाइन प्रक्रिया:*
 1️⃣ विजिट करें: https://web.kolhapurcorporation.gov.in/citizen
@@ -1437,15 +1612,19 @@ ${isBirth ?
 - स्ट्रीट लाइट की समस्याएं
 - जल निकासी की समस्याएं
 
-*आपातकालीन संपर्क:* 0231-2540291`
-        };
+*आपातकालीन संपर्क:* 0231-2540291`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
-    }
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
 
-    private getContactInfo(language: string): string {
-        const response = {
-            english: `📞 *Kolhapur Municipal Corporation Contact*
+  private getContactInfo(language: string): string {
+    const response = {
+      english: `📞 *Kolhapur Municipal Corporation Contact*
 
 *Main Office:*
 Phone: 0231-2540291
@@ -1464,7 +1643,7 @@ Monday to Saturday: 10:00 AM - 5:00 PM
 
 *Emergency Services:* Available 24/7`,
 
-            marathi: `📞 *कोल्हापूर महानगरपालिका संपर्क*
+      marathi: `📞 *कोल्हापूर महानगरपालिका संपर्क*
 
 *मुख्य कार्यालय:*
 फोन: 0231-2540291
@@ -1483,7 +1662,7 @@ Monday to Saturday: 10:00 AM - 5:00 PM
 
 *आपत्कालीन सेवा:* 24/7 उपलब्ध`,
 
-            hindi: `📞 *कोल्हापुर नगर निगम संपर्क*
+      hindi: `📞 *कोल्हापुर नगर निगम संपर्क*
 
 *मुख्य कार्यालय:*
 फोन: 0231-2540291
@@ -1500,66 +1679,76 @@ Monday to Saturday: 10:00 AM - 5:00 PM
 *कार्यालय समय:*
 सोमवार से शनिवार: सुबह 10:00 - शाम 5:00
 
-*आपातकालीन सेवा:* 24/7 उपलब्ध`
-        };
+*आपातकालीन सेवा:* 24/7 उपलब्ध`,
+    };
 
-        return response[language as 'english' | 'marathi' | 'hindi'] + "\n\n" + this.getMenuReminder(language);
+    return (
+      response[language as "english" | "marathi" | "hindi"] +
+      "\n\n" +
+      this.getMenuReminder(language)
+    );
+  }
+
+  // src/lib/whatsappService.ts - Part 6: AI Processing & System Integration
+  // Add these methods to the WhatsAppService class
+
+  // Process with your existing KMC AI logic
+  private async processWithKMCAI(
+    userMessage: string,
+    history: ChatMessage[],
+    language: string,
+  ): Promise<string> {
+    try {
+      // Use your existing buildMCPPrompt and kmcContextTool logic
+      const systemPrompt = await this.buildKMCPrompt(language);
+
+      const result = await streamText({
+        model: google("gemini-2.0-flash"),
+        system: systemPrompt,
+        temperature: 0.3,
+        tools: {
+          kmcContextTool,
+        },
+        messages: [...history, { role: "user", content: userMessage }],
+      });
+
+      let fullResponse = "";
+      for await (const textPart of result.textStream) {
+        fullResponse += textPart;
+      }
+
+      return (
+        fullResponse ||
+        "I apologize, but I couldn't generate a proper response. Please try asking about KMC services or type 'menu' to see options."
+      );
+    } catch (error) {
+      console.error("KMC AI processing error:", error);
+      return "I'm having trouble processing your request. Please type 'menu' to see service options or contact KMC at 0231-2540291.";
+    }
+  }
+
+  private async buildKMCPrompt(language: string): Promise<string> {
+    // Copy your existing buildMCPPrompt function logic here
+    const now = new Date();
+    const date = now.toLocaleDateString("en-IN");
+    const time = now.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    let languageInstruction = "";
+    if (language === "marathi") {
+      languageInstruction =
+        "Respond ONLY in Marathi (मराठी). All responses must be in Marathi language.";
+    } else if (language === "hindi") {
+      languageInstruction =
+        "Respond ONLY in Hindi (हिंदी). All responses must be in Hindi language.";
+    } else if (language === "english") {
+      languageInstruction =
+        "Respond ONLY in English. All responses must be in English language.";
     }
 
-    // src/lib/whatsappService.ts - Part 6: AI Processing & System Integration
-    // Add these methods to the WhatsAppService class
-
-    // Process with your existing KMC AI logic
-    private async processWithKMCAI(userMessage: string, history: ChatMessage[], language: string): Promise<string> {
-        try {
-            // Use your existing buildMCPPrompt and kmcContextTool logic
-            const systemPrompt = await this.buildKMCPrompt(language);
-
-            const result = await streamText({
-                model: google("gemini-2.0-flash"),
-                system: systemPrompt,
-                temperature: 0.3,
-                maxSteps: 10,
-                tools: {
-                    kmcContextTool
-                },
-                messages: [
-                    ...history,
-                    { role: 'user', content: userMessage }
-                ],
-            });
-
-            let fullResponse = '';
-            for await (const textPart of result.textStream) {
-                fullResponse += textPart;
-            }
-
-            return fullResponse || "I apologize, but I couldn't generate a proper response. Please try asking about KMC services or type 'menu' to see options.";
-        } catch (error) {
-            console.error('KMC AI processing error:', error);
-            return "I'm having trouble processing your request. Please type 'menu' to see service options or contact KMC at 0231-2540291.";
-        }
-    }
-
-    private async buildKMCPrompt(language: string): Promise<string> {
-        // Copy your existing buildMCPPrompt function logic here
-        const now = new Date();
-        const date = now.toLocaleDateString("en-IN");
-        const time = now.toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-        });
-
-        let languageInstruction = '';
-        if (language === 'marathi') {
-            languageInstruction = 'Respond ONLY in Marathi (मराठी). All responses must be in Marathi language.';
-        } else if (language === 'hindi') {
-            languageInstruction = 'Respond ONLY in Hindi (हिंदी). All responses must be in Hindi language.';
-        } else if (language === 'english') {
-            languageInstruction = 'Respond ONLY in English. All responses must be in English language.';
-        }
-
-        return `
+    return `
 You are an official WhatsApp assistant for Kolhapur Municipal Corporation (KMC), established in 1954 and upgraded to municipal corporation in 1982.
 
 System Context:
@@ -1604,7 +1793,7 @@ Respond with: "I can only assist with Kolhapur Municipal Corporation related que
 
 Always use kmcContextTool to provide accurate information and step-by-step guidance.
 `;
-    }
+  }
 
-    // Close the class with the final brace
+  // Close the class with the final brace
 }
